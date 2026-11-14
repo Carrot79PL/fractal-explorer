@@ -56,6 +56,10 @@ final class InteractiveMTKView: MTKView {
         renderer?.zoom(by: factor, at: point(event), in: bounds.size)
     }
 
+    override func rotate(with event: NSEvent) {
+        renderer?.rotateBy(degrees: Double(event.rotation))
+    }
+
     override func magnify(with event: NSEvent) {
         renderer?.zoom(by: exp(Double(event.magnification) * 2.0), at: point(event), in: bounds.size)
     }

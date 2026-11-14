@@ -44,7 +44,7 @@ struct DD2 {
     SIMD2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
 }
 
-/// Układ musi odpowiadać `struct Uniforms` w Shaders.metal (96 bajtów).
+/// Układ musi odpowiadać `struct Uniforms` w Shaders.metal (128 bajtów).
 struct FractalUniforms {
     var dcOff: SIMD2<Float>
     var center: SIMD2<Float>
@@ -66,6 +66,14 @@ struct FractalUniforms {
     var glow: Float
     var palette2: Int32 = 0
     var pmix: Float = 0
+    var angle: Float = 0
+    var saturation: Float = 1
+    var contrast: Float = 1
+    var pitch: Float = 0
+    var hscale: Float = 0
+    var invert: Int32 = 0
+    var kaleido: Int32 = 0
+    var interior: Int32 = 0
 }
 
 enum ExportSize: Int, CaseIterable, Identifiable {
@@ -109,6 +117,28 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
     } {
         didSet { applyCustomColors(); wake() }
     }
+    // Obrót, 3D, kolory i dźwięk
+    @Published var angleDeg = 0.0 { didSet { if !syncing { setAngle(angleDeg * .pi / 180); lastInput = CACurrentMediaTime() } } }
+    @Published var autoRotate = false { didSet { if autoRotate { wake() } } }
+    @Published var rotateSpeed = 8.0 { didSet { wake() } }
+    @Published var kaleido = 0 { didSet { wake() } }
+    @Published var interiorColor = false { didSet { wake() } }
+    @Published var saturation = 1.0 { didSet { wake() } }
+    @Published var contrast = 1.0 { didSet { wake() } }
+    @Published var invert = false { didSet { wake() } }
+    @Published var mode3D = false { didSet { lastInput = CACurrentMediaTime(); wake() } }
+    @Published var pitchDeg = 55.0 { didSet { wake() } }
+    @Published var heightScale = 0.55 { didSet { wake() } }
+    @Published var musicOn = false {
+        didSet {
+            if musicOn { if music == nil { music = AmbientMusic() }; music?.setVolume(musicVolume) }
+            music?.setEnabled(musicOn)
+        }
+    }
+    @Published var musicVolume = 0.5 { didSet { music?.setVolume(musicVolume) } }
+    private var music: AmbientMusic?
+    private var syncing = false
+    private var angleRad = 0.0
     @Published var favorites: [SavedView] = []
     @Published var isExporting = false
 
@@ -122,6 +152,9 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
     let device: MTLDevice
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
+    private let fieldPipeline: MTLRenderPipelineState
+    private let meshPipeline: MTLRenderPipelineState
+    private var fieldTex: MTLTexture?
     private weak var view: MTKView?
     private var orbitBuffers: [MTLBuffer] = []
     private let inflight = DispatchSemaphore(value: 3)
@@ -135,8 +168,29 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
     private var targetScale = FractalModel.mandelbrot.homeScale
     private var homing = false
 
+    /// Obrót wektora z osi ekranu do osi płaszczyzny zespolonej.
+    private func rotv(_ v: SIMD2<Double>) -> SIMD2<Double> {
+        let c = cos(angleRad), s = sin(angleRad)
+        return SIMD2(c * v.x - s * v.y, s * v.x + c * v.y)
+    }
+
     private var center: DD2 {
-        DD2(x: anchor.x - DD(anchorVec.x * scale), y: anchor.y - DD(anchorVec.y * scale))
+        let r = rotv(anchorVec)
+        return DD2(x: anchor.x - DD(r.x * scale), y: anchor.y - DD(r.y * scale))
+    }
+
+    /// Zmienia kąt obrotu wokół środka widoku (środek zostaje w miejscu).
+    private func setAngle(_ a: Double) {
+        let c = center
+        anchor = c
+        anchorVec = .zero
+        angleRad = a
+        wake()
+    }
+
+    func rotateBy(degrees: Double) {
+        setAngle(angleRad - degrees * .pi / 180)
+        lastInput = CACurrentMediaTime()
     }
 
     // MARK: Orbita referencyjna (tylko Mandelbrot)
@@ -184,6 +238,19 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         d.colorAttachments[0].pixelFormat = .bgra8Unorm
         do { pipeline = try device.makeRenderPipelineState(descriptor: d) }
         catch { fatalError("Pipeline: \(error)") }
+
+        let f = MTLRenderPipelineDescriptor()
+        f.vertexFunction = library.makeFunction(name: "vertexMain")
+        f.fragmentFunction = library.makeFunction(name: "fragmentField")
+        f.colorAttachments[0].pixelFormat = .rgba16Float
+        let m = MTLRenderPipelineDescriptor()
+        m.vertexFunction = library.makeFunction(name: "vertexMesh")
+        m.fragmentFunction = library.makeFunction(name: "fragmentMesh")
+        m.colorAttachments[0].pixelFormat = .bgra8Unorm
+        do {
+            fieldPipeline = try device.makeRenderPipelineState(descriptor: f)
+            meshPipeline = try device.makeRenderPipelineState(descriptor: m)
+        } catch { fatalError("Pipeline 3D: \(error)") }
 
         super.init()
         for _ in 0..<3 {
@@ -237,6 +304,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     func resetView() {
         autoZoom = false
+        if angleRad != 0 { setAngle(0); syncing = true; angleDeg = 0; syncing = false }
         anchor = center
         anchorVec = .zero
         targetScale = model.homeScale
@@ -289,8 +357,9 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// Ustawia parametr c Julii na punkt pod kursorem w bieżącej płaszczyźnie (z Mandelbrota).
     func juliaFromCursor() {
         let c = center
-        juliaRe = c.x.hi + cursorUV.x * aspect * scale
-        juliaIm = c.y.hi + cursorUV.y * scale
+        let pv = rotv(SIMD2(cursorUV.x * aspect, cursorUV.y))
+        juliaRe = c.x.hi + pv.x * scale
+        juliaIm = c.y.hi + pv.y * scale
         model = .julia
     }
 
@@ -307,10 +376,11 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         homing = false
         lastInput = CACurrentMediaTime()
         let a = Double(size.width / size.height)
-        let u = uv(for: p, in: size)
+        let u = mode3D ? SIMD2<Double>(0, 0) : uv(for: p, in: size)
         let vec = SIMD2(u.x * a, u.y)
         let c = center
-        anchor = DD2(x: c.x + DD(vec.x * scale), y: c.y + DD(vec.y * scale))
+        let pv = rotv(vec)
+        anchor = DD2(x: c.x + DD(pv.x * scale), y: c.y + DD(pv.y * scale))
         anchorVec = vec
         cursorUV = u
         targetScale = min(max(targetScale / factor, model.minScale), 3.0)
@@ -323,8 +393,9 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         homing = false
         lastInput = CACurrentMediaTime()
         let k = 2.0 * scale / Double(size.height)
-        anchor.x = anchor.x + DD(-Double(dx) * k)
-        anchor.y = anchor.y + DD(Double(dy) * k)
+        let d = rotv(SIMD2(-Double(dx) * k, Double(dy) * k))
+        anchor.x = anchor.x + DD(d.x)
+        anchor.y = anchor.y + DD(d.y)
         wake()
     }
 
@@ -399,7 +470,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
             let g = 3
             for gy in -g...g {
                 for gx in -g...g {
-                    let vec = SIMD2(Double(gx) / Double(g) * aspect, Double(gy) / Double(g))
+                    let vec = rotv(SIMD2(Double(gx) / Double(g) * aspect, Double(gy) / Double(g)))
                     let n = probeIterations(dcs: vec, s: s, Z: d, cap: cap)
                     if n > best { best = n; bestVec = vec }
                 }
@@ -441,7 +512,15 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
                                shade: Float(shade),
                                glow: Float(glow),
                                palette2: Int32(prevPalette),
-                               pmix: fade ? Float(paletteFade * paletteFade * (3 - 2 * paletteFade)) : 0)
+                               pmix: fade ? Float(paletteFade * paletteFade * (3 - 2 * paletteFade)) : 0,
+                               angle: Float(angleRad),
+                               saturation: Float(saturation),
+                               contrast: Float(contrast),
+                               pitch: Float(pitchDeg * .pi / 180),
+                               hscale: Float(heightScale * 0.6),
+                               invert: invert ? 1 : 0,
+                               kaleido: Int32(kaleido),
+                               interior: (interiorColor || mode3D) ? 1 : 0)
     }
 
     private func updateHUD(force: Bool) {
@@ -449,14 +528,19 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         guard force || now - lastHUD > 0.25 else { return }
         lastHUD = now
         let c = center
-        let r = c.x.hi + cursorUV.x * aspect * scale
-        let i = c.y.hi + cursorUV.y * scale
+        let pv = rotv(SIMD2(cursorUV.x * aspect, cursorUV.y))
+        let r = c.x.hi + pv.x * scale
+        let i = c.y.hi + pv.y * scale
         let digits = min(17, max(7, Int(ceil(-log10(scale))) + 4))
         let re = String(format: "%+.*f", digits, r)
         let im = String(format: "%+.*f", digits, i)
         let z = model.homeScale / scale
         let zt = z >= 1e4 ? String(format: "%.2e×", z) : String(format: "%.1f×", z)
         let it = "\(effectiveIterations(for: scale))"
+        var deg = (angleRad * 180 / .pi).truncatingRemainder(dividingBy: 360)
+        if deg > 180 { deg -= 360 } else if deg < -180 { deg += 360 }
+        if abs(deg - angleDeg) > 0.05 { syncing = true; angleDeg = deg; syncing = false }
+        music?.setDepth(min(1, max(0, log10(max(z, 1)) / 12)))
         if re != realText { realText = re }
         if im != imagText { imagText = im }
         if zt != zoomText { zoomText = zt }
@@ -496,6 +580,10 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     homing = false
                 }
             }
+        }
+        if autoRotate {
+            setAngle(angleRad + rotateSpeed * .pi / 180 * dt)
+            animating = true
         }
         if paletteFade > 0 {
             paletteFade = max(0, paletteFade - dt / 0.7)
@@ -539,8 +627,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         if model == .mandelbrot { let t0 = CACurrentMediaTime(); prepareOrbit(needed: iters, aspect: aspect); dbgOrbit += (CACurrentMediaTime() - t0) * 1000 }
 
         inflight.wait()
-        guard let cb = queue.makeCommandBuffer(),
-              let enc = cb.makeRenderCommandEncoder(descriptor: rpd) else { inflight.signal(); return }
+        guard let cb = queue.makeCommandBuffer() else { inflight.signal(); return }
 
         let buf = orbitBuffers[frameIndex % 3]
         frameIndex += 1
@@ -548,9 +635,29 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
             _ = orbitF.withUnsafeBytes { memcpy(buf.contents(), $0.baseAddress!, $0.count) }
         }
 
-        let aa = (antialias && !moving && restStage >= 1 && restAAOK) ? 2 : 1
-        encode(enc, uniforms: makeUniforms(aspect: aspect, pixelsHigh: Int(want.height), maxIter: iters, aa: aa), orbit: buf)
-        enc.endEncoding()
+        let aa = (!mode3D && antialias && !moving && restStage >= 1 && restAAOK) ? 2 : 1
+        let uni = makeUniforms(aspect: aspect, pixelsHigh: Int(want.height), maxIter: iters, aa: aa)
+        var drew = false
+        if mode3D, let ftex = fieldTexture(width: Int(want.width), height: Int(want.height)) {
+            let fp = MTLRenderPassDescriptor()
+            fp.colorAttachments[0].texture = ftex
+            fp.colorAttachments[0].loadAction = .dontCare
+            fp.colorAttachments[0].storeAction = .store
+            if let e1 = cb.makeRenderCommandEncoder(descriptor: fp) {
+                encode(e1, uniforms: uni, orbit: buf, pipelineOverride: fieldPipeline)
+                e1.endEncoding()
+                if let enc = cb.makeRenderCommandEncoder(descriptor: rpd) {
+                    encodeMesh(enc, uniforms: uni, tex: ftex)
+                    enc.endEncoding()
+                    drew = true
+                }
+            }
+        }
+        if !drew {
+            guard let enc = cb.makeRenderCommandEncoder(descriptor: rpd) else { inflight.signal(); return }
+            encode(enc, uniforms: uni, orbit: buf)
+            enc.endEncoding()
+        }
         cb.present(drawable)
         let sem = inflight
         let wasMoving = moving
@@ -593,10 +700,30 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         }
     }
 
-    private func encode(_ enc: MTLRenderCommandEncoder, uniforms: FractalUniforms, orbit: MTLBuffer) {
+    private func fieldTexture(width: Int, height: Int) -> MTLTexture? {
+        if let t = fieldTex, t.width == width, t.height == height { return t }
+        let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
+        d.usage = [.renderTarget, .shaderRead]
+        d.storageMode = .private
+        fieldTex = device.makeTexture(descriptor: d)
+        return fieldTex
+    }
+
+    private func encodeMesh(_ enc: MTLRenderCommandEncoder, uniforms: FractalUniforms, tex: MTLTexture) {
+        var u = uniforms
+        enc.setRenderPipelineState(meshPipeline)
+        enc.setVertexBytes(&u, length: MemoryLayout<FractalUniforms>.stride, index: 0)
+        enc.setVertexTexture(tex, index: 0)
+        enc.setFragmentBytes(&u, length: MemoryLayout<FractalUniforms>.stride, index: 0)
+        enc.setFragmentTexture(tex, index: 0)
+        enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 320 * 320 * 6)
+    }
+
+    private func encode(_ enc: MTLRenderCommandEncoder, uniforms: FractalUniforms, orbit: MTLBuffer,
+                        pipelineOverride: MTLRenderPipelineState? = nil) {
         var u = uniforms
         var pal = Palettes.packed()
-        enc.setRenderPipelineState(pipeline)
+        enc.setRenderPipelineState(pipelineOverride ?? pipeline)
         enc.setFragmentBytes(&u, length: MemoryLayout<FractalUniforms>.stride, index: 0)
         enc.setFragmentBuffer(orbit, offset: 0, index: 1)
         enc.setFragmentBytes(&pal, length: pal.count * MemoryLayout<SIMD4<Float>>.stride, index: 2)
@@ -605,7 +732,9 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     // MARK: Eksport PNG
 
-    func renderImage(longSide: Int) -> CGImage? {
+    func renderImage(longSide requested: Int) -> CGImage? {
+        let is3D = mode3D
+        let longSide = is3D ? min(requested, 3840) : requested
         let ds = view?.bounds.size ?? .zero
         let asp = (ds.width > 0 && ds.height > 0) ? Double(ds.width / ds.height) : 16.0 / 9.0
         let width = asp >= 1 ? longSide : Int((Double(longSide) * asp).rounded())
@@ -623,20 +752,41 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         desc.storageMode = .shared
         guard let tex = device.makeTexture(descriptor: desc) else { return nil }
 
-        let u = makeUniforms(aspect: asp, pixelsHigh: height, maxIter: iters, aa: antialias ? 2 : 1, fade: false)
+        let u = makeUniforms(aspect: asp, pixelsHigh: height, maxIter: iters, aa: (antialias && !is3D) ? 2 : 1, fade: false)
+        var ftex: MTLTexture?
+        if is3D {
+            let fd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
+            fd.usage = [.renderTarget, .shaderRead]
+            fd.storageMode = .private
+            ftex = device.makeTexture(descriptor: fd)
+            if ftex == nil { return nil }
+        }
         let bands = max(16, height / 64)
         for b in 0..<bands {
             let y0 = height * b / bands
             let y1 = height * (b + 1) / bands
             let rpd = MTLRenderPassDescriptor()
-            rpd.colorAttachments[0].texture = tex
+            rpd.colorAttachments[0].texture = is3D ? ftex! : tex
             rpd.colorAttachments[0].loadAction = b == 0 ? .clear : .load
             rpd.colorAttachments[0].storeAction = .store
             rpd.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
             guard let cb = queue.makeCommandBuffer(),
                   let enc = cb.makeRenderCommandEncoder(descriptor: rpd) else { return nil }
             enc.setScissorRect(MTLScissorRect(x: 0, y: y0, width: width, height: y1 - y0))
-            encode(enc, uniforms: u, orbit: orbitBuf)
+            encode(enc, uniforms: u, orbit: orbitBuf, pipelineOverride: is3D ? fieldPipeline : nil)
+            enc.endEncoding()
+            cb.commit()
+            cb.waitUntilCompleted()
+        }
+        if is3D, let ftex = ftex {
+            let rpd = MTLRenderPassDescriptor()
+            rpd.colorAttachments[0].texture = tex
+            rpd.colorAttachments[0].loadAction = .clear
+            rpd.colorAttachments[0].storeAction = .store
+            rpd.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+            guard let cb = queue.makeCommandBuffer(),
+                  let enc = cb.makeRenderCommandEncoder(descriptor: rpd) else { return nil }
+            encodeMesh(enc, uniforms: u, tex: ftex)
             enc.endEncoding()
             cb.commit()
             cb.waitUntilCompleted()
@@ -706,12 +856,32 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
             if p.count >= 12, let a = Double(p[9]), let b = Double(p[10]), let pw = Int(p[11]) {
                 juliaRe = a; juliaIm = b; power = pw
             }
+            if let extra = env["MANDELBROT_EXTRA"] {
+                for kv in extra.split(separator: ";") {
+                    let t = kv.split(separator: "=").map(String.init)
+                    guard t.count == 2, let v = Double(t[1]) else { continue }
+                    switch t[0] {
+                    case "angle": setAngle(v * .pi / 180)
+                    case "mode3d": mode3D = v != 0
+                    case "pitch": pitchDeg = v
+                    case "height": heightScale = v
+                    case "kaleido": kaleido = Int(v)
+                    case "interior": interiorColor = v != 0
+                    case "sat": saturation = v
+                    case "contrast": contrast = v
+                    case "invert": invert = v != 0
+                    case "music": musicOn = v != 0; musicVolume = 0.5
+                    default: break
+                    }
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 guard let self = self else { return }
                 if let img = self.renderImage(longSide: 1000) {
                     try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?
                         .write(to: URL(fileURLWithPath: p[8]))
                 }
+                if let m = self.music { FileHandle.standardError.write(Data("music peak \(m.peak)\n".utf8)) }
                 exit(0)
             }
         }

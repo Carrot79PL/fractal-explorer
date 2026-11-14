@@ -16,7 +16,7 @@ struct ContentView: View {
                 HStack(alignment: .top) {
                     hud
                     Spacer()
-                    Color.clear.frame(width: 150, height: 40)
+                    Color.clear.frame(width: 260, height: 40)
                 }
                 HStack(alignment: .top) {
                     Spacer()
@@ -30,6 +30,16 @@ struct ContentView: View {
             .allowsHitTesting(showUI)
             .animation(.smooth(duration: 0.3), value: showUI)
             .animation(.smooth(duration: 0.3), value: showInspector)
+
+            // Ukryte skróty klawiszowe (działają także przy ukrytym interfejsie).
+            Group {
+                Button("") { renderer.rotateBy(degrees: 5) }.keyboardShortcut("q", modifiers: [])
+                Button("") { renderer.rotateBy(degrees: -5) }.keyboardShortcut("e", modifiers: [])
+                Button("") { renderer.mode3D.toggle() }.keyboardShortcut("d", modifiers: [])
+                Button("") { renderer.musicOn.toggle() }.keyboardShortcut("m", modifiers: [])
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
 
             // Przyciski w rogu: zawsze na wierzchu i zawsze klikalne.
             VStack {
@@ -65,6 +75,7 @@ struct ContentView: View {
             hudRow("Im", renderer.imagText + " i")
             hudRow("Zoom", renderer.zoomText)
             hudRow("Iter", renderer.iterText)
+            if abs(renderer.angleDeg) > 0.5 { hudRow(tr("Kąt", "Angle"), String(format: "%.0f°", renderer.angleDeg)) }
             Text(tr("Autor: Tomasz Marchewka", "Author: Tomasz Marchewka"))
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
@@ -99,6 +110,16 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .help(tr("Język: polski (kliknij, aby zmienić na English)", "Language: English (click to switch to Polski)"))
+            RoundButton(symbol: "cube", help: tr("Krajobraz 3D (D)", "3D landscape (D)"), active: renderer.mode3D) {
+                renderer.mode3D.toggle()
+            }
+            .opacity(showUI ? 1 : 0)
+            .allowsHitTesting(showUI)
+            RoundButton(symbol: renderer.musicOn ? "speaker.wave.2.fill" : "speaker.slash", help: tr("Muzyka ambient (M)", "Ambient music (M)"), active: renderer.musicOn) {
+                renderer.musicOn.toggle()
+            }
+            .opacity(showUI ? 1 : 0)
+            .allowsHitTesting(showUI)
             RoundButton(symbol: "sidebar.right", help: tr("Panel ustawień (I)", "Settings panel (I)"), active: showInspector) {
                 if !showUI { showUI = true }
                 showInspector.toggle()
@@ -199,7 +220,8 @@ private struct Inspector: View {
 
     @State private var tab = 0
     private var tabs: [(String, String)] = [("Model", "square.stack.3d.up"), (tr("Kolor", "Color"), "paintpalette"),
-                                            (tr("Efekty", "Effects"), "wand.and.stars"), (tr("Miejsca", "Places"), "star")]
+                                            (tr("Efekty", "Effects"), "wand.and.stars"),
+                                            (tr("Widok", "View"), "rotate.3d"), (tr("Miejsca", "Places"), "star")]
 
     var body: some View {
         VStack(spacing: 10) {
@@ -237,6 +259,7 @@ private struct Inspector: View {
         case 0: modelSection
         case 1: colorSection
         case 2: effectsSection
+        case 3: viewSection
         default: viewsSection
         }
     }
@@ -315,6 +338,47 @@ private struct Inspector: View {
             Toggle(tr("Antyaliasing 2×2 (w spoczynku)", "Antialiasing 2×2 (at rest)"), isOn: $renderer.antialias).font(.callout)
             SliderRow(tr("Relief 3D", "3D relief"), value: $renderer.shade, range: 0...1, format: "%.2f")
             SliderRow(tr("Poświata", "Glow"), value: $renderer.glow, range: 0...1, format: "%.2f")
+            SliderRow(tr("Nasycenie", "Saturation"), value: $renderer.saturation, range: 0...2, format: "%.2f")
+            SliderRow(tr("Kontrast", "Contrast"), value: $renderer.contrast, range: 0.5...1.8, format: "%.2f")
+            Toggle(tr("Kolorowe wnętrze zbioru", "Colored set interior"), isOn: $renderer.interiorColor).font(.callout)
+            Toggle(tr("Odwróć kolory", "Invert colors"), isOn: $renderer.invert).font(.callout)
+            Stepper(value: $renderer.kaleido, in: 0...12) {
+                Text(renderer.kaleido < 2 ? tr("Kalejdoskop: wyłączony", "Kaleidoscope: off")
+                                          : tr("Kalejdoskop: \(renderer.kaleido) segmentów", "Kaleidoscope: \(renderer.kaleido) segments"))
+                    .font(.callout)
+            }
+        }
+    }
+
+    // MARK: Widok (obrót, 3D, dźwięk)
+    private var viewSection: some View {
+        VStack(spacing: 12) {
+            Card(title: tr("Obrót", "Rotation"), symbol: "rotate.right") {
+                SliderRow(tr("Kąt", "Angle"), value: $renderer.angleDeg, range: -180...180, format: "%.0f°")
+                Toggle(tr("Automatyczny obrót", "Auto-rotate"), isOn: $renderer.autoRotate).font(.callout)
+                if renderer.autoRotate {
+                    SliderRow(tr("Prędkość", "Speed"), value: $renderer.rotateSpeed, range: -40...40, format: "%.0f°/s")
+                }
+                Text(tr("Gest obrotu na gładziku, klawisze Q / E.", "Trackpad rotate gesture, keys Q / E."))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Card(title: "3D", symbol: "cube") {
+                Toggle(tr("Krajobraz 3D (D)", "3D landscape (D)"), isOn: $renderer.mode3D).font(.callout)
+                if renderer.mode3D {
+                    SliderRow(tr("Nachylenie", "Tilt"), value: $renderer.pitchDeg, range: 0...78, format: "%.0f°")
+                    SliderRow(tr("Wysokość", "Height"), value: $renderer.heightScale, range: 0...1.5, format: "%.2f")
+                    Text(tr("W trybie 3D zoom celuje w środek widoku.", "In 3D mode, zoom targets the view center."))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            Card(title: tr("Muzyka", "Music"), symbol: "music.note") {
+                Toggle(tr("Muzyka ambient (M)", "Ambient music (M)"), isOn: $renderer.musicOn).font(.callout)
+                if renderer.musicOn {
+                    SliderRow(tr("Głośność", "Volume"), value: $renderer.musicVolume, range: 0...1, format: "%.2f")
+                    Text(tr("Im głębszy zoom, tym jaśniejsze brzmienie.", "The deeper the zoom, the brighter the sound."))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

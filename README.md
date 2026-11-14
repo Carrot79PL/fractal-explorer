@@ -24,6 +24,10 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 - **Adaptacyjna rozdzielczość** w ruchu, by utrzymać płynność; pełna jakość po zatrzymaniu.
 - **Miejsca:** 8 gotowych widoków + własne ulubione (zapamiętywane).
 - **Eksport PNG** w 4K i 8K.
+- **Obrót widoku** (gest obrotu na gładziku, klawisze `Q`/`E`, suwak, automatyczny obrót).
+- **Krajobraz 3D:** fraktal jako teren z oświetleniem, regulowane nachylenie i wysokość; działa z obrotem i zoomem.
+- **Muzyka ambient:** generowana na żywo (akordy, dzwonki, pogłos); im głębszy zoom, tym jaśniejsze brzmienie.
+- **Więcej efektów:** kalejdoskop, kolorowe wnętrze zbioru, nasycenie, kontrast, odwrócenie kolorów.
 - **Dwujęzyczny interfejs PL/EN** (przycisk w prawym górnym rogu).
 
 ### Skróty klawiszowe
@@ -35,6 +39,9 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 | `R` | reset widoku |
 | `I` | panel ustawień |
 | `H` | ukryj / pokaż interfejs |
+| `Q` / `E` | obrót widoku |
+| `D` | krajobraz 3D |
+| `M` | muzyka |
 | `J` | zbiór Julii z punktu pod kursorem |
 
 ### Budowanie
@@ -76,6 +83,10 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 - **Adaptive resolution** while moving to stay smooth; full quality once you stop.
 - **Places:** 8 built-in views plus your own persistent favorites.
 - **PNG export** in 4K and 8K.
+- **View rotation** (trackpad rotate gesture, `Q`/`E` keys, slider, auto-rotate).
+- **3D landscape:** the fractal as a lit terrain with adjustable tilt and height; works with rotation and zoom.
+- **Ambient music:** generated live (chords, bells, reverb); the deeper the zoom, the brighter the sound.
+- **More effects:** kaleidoscope, colored set interior, saturation, contrast, color inversion.
 - **Bilingual UI, PL/EN** (button in the top-right corner).
 
 ### Keyboard shortcuts
@@ -87,6 +98,9 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 | `R` | reset view |
 | `I` | settings panel |
 | `H` | hide / show interface |
+| `Q` / `E` | rotate view |
+| `D` | 3D landscape |
+| `M` | music |
 | `J` | Julia set from the point under the cursor |
 
 ### Building

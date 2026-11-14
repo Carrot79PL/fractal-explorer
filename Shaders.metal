@@ -23,6 +23,14 @@ struct Uniforms {
     float  glow;
     int    palette2;  // poprzednia paleta (płynne przejście)
     float  pmix;      // 1 = jeszcze poprzednia, 0 = już nowa
+    float  angle;     // obrót widoku (rad)
+    float  saturation;
+    float  contrast;
+    float  pitch;     // nachylenie kamery 3D (rad)
+    float  hscale;    // skala wysokości 3D
+    int    invert;
+    int    kaleido;   // liczba segmentów kalejdoskopu (0/1 = wyłączony)
+    int    interior;  // kolorowe wnętrze zbioru
 };
 
 struct VSOut {
@@ -88,9 +96,9 @@ static PointResult evalPoint(float2 vec, constant Uniforms &u, constant float2 *
             float2 c = u.center + vec * s;
             float2 q = c - float2(0.25, 0.0);
             float q2 = dot(q, q);
-            if (q2 * (q2 + q.x) < 0.25 * c.y * c.y) return r;
+            if (q2 * (q2 + q.x) < 0.25 * c.y * c.y) { r.trap = 0.3; return r; }
             float2 d = c + float2(1.0, 0.0);
-            if (dot(d, d) < 0.0625) return r;
+            if (dot(d, d) < 0.0625) { r.trap = 0.3; return r; }
         }
         float2 dcs = u.dcOff + vec;
         float2 w = float2(0.0);
@@ -178,7 +186,13 @@ static float3 palMix(constant float4 *pal, constant Uniforms &u, float t) {
 
 static float3 colorOf(PointResult r, constant Uniforms &u, constant float4 *pal, thread float &height) {
     height = 0.0;
-    if (!r.escaped) return float3(0.0);
+    if (!r.escaped) {
+        if (u.interior != 0 && u.model != 5) {
+            float tt = -log(r.trap + 1e-4) * 0.12 * u.density + u.time;
+            return palMix(pal, u, tt) * 0.5;
+        }
+        return float3(0.0);
+    }
     float t;
     float3 col;
     if (u.model == 5) {
@@ -199,11 +213,38 @@ static float3 colorOf(PointResult r, constant Uniforms &u, constant float4 *pal,
     return col;
 }
 
+static float2 rot2(float2 v, float a) {
+    float c = cos(a), sn = sin(a);
+    return float2(c * v.x - sn * v.y, sn * v.x + c * v.y);
+}
+
+/// Wektor w płaszczyźnie względem środka widoku: kalejdoskop (w osiach ekranu), potem obrót.
+static float2 viewVec(float2 uv, constant Uniforms &u) {
+    float2 sv = float2(uv.x * u.aspect, uv.y);
+    if (u.kaleido > 1) {
+        float seg = 6.2831853 / float(u.kaleido);
+        float a = atan2(sv.y, sv.x);
+        float rr = length(sv);
+        a = a - seg * floor(a / seg);
+        a = fabs(a - 0.5 * seg);
+        sv = rr * float2(cos(a), sin(a));
+    }
+    return rot2(sv, u.angle);
+}
+
+static float3 grade(float3 col, constant Uniforms &u) {
+    float lum = dot(col, float3(0.299, 0.587, 0.114));
+    col = mix(float3(lum), col, u.saturation);
+    col = (col - 0.5) * u.contrast + 0.5;
+    if (u.invert != 0) col = 1.0 - col;
+    return max(col, 0.0);
+}
+
 fragment float4 fragmentMain(VSOut in [[stage_in]],
                              constant Uniforms &u [[buffer(0)]],
                              constant float2 *ref [[buffer(1)]],
                              constant float4 *pal [[buffer(2)]]) {
-    float2 base = float2(in.uv.x * u.aspect, in.uv.y);
+    float2 base = viewVec(in.uv, u);
     int n = max(u.aa, 1);
     float3 acc = float3(0.0);
     const float3 L = normalize(float3(-0.55, 0.65, 0.55));
@@ -225,10 +266,83 @@ fragment float4 fragmentMain(VSOut in [[stage_in]],
             acc += col;
         }
     }
-    float3 col = acc / float(n * n);
+    float3 col = grade(acc / float(n * n), u);
 
     // delikatna winieta i dithering przeciw bandingowi
     col *= mix(1.0, 0.80, smoothstep(0.7, 1.9, length(in.uv)));
+    float noise = fract(sin(dot(in.position.xy, float2(12.9898, 78.233))) * 43758.5453);
+    col += (noise - 0.5) / 255.0;
+    return float4(saturate(col), 1.0);
+}
+
+// MARK: Tryb 3D – przebieg 1: pole (kolor + wysokość w alfa) do tekstury
+
+fragment float4 fragmentField(VSOut in [[stage_in]],
+                              constant Uniforms &u [[buffer(0)]],
+                              constant float2 *ref [[buffer(1)]],
+                              constant float4 *pal [[buffer(2)]]) {
+    PointResult r = evalPoint(viewVec(in.uv, u), u, ref);
+    float hh;
+    float3 col = grade(colorOf(r, u, pal, hh), u);
+    float h = 1.0;
+    if (r.escaped) h = saturate(log2(r.sl + 1.0) / log2(float(u.maxIter) + 1.0) * 1.15);
+    return float4(col, h);
+}
+
+// MARK: Tryb 3D – przebieg 2: siatka z przesunięciem wierzchołków wg wysokości
+
+struct MeshOut {
+    float4 position [[position]];
+    float2 tc;
+    float  wz;
+};
+
+constant int MESH_G = 320;
+
+vertex MeshOut vertexMesh(uint vid [[vertex_id]],
+                          constant Uniforms &u [[buffer(0)]],
+                          texture2d<float> tex [[texture(0)]]) {
+    uint cell = vid / 6, k = vid % 6;
+    const int2 corner[6] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 0), int2(1, 1), int2(0, 1) };
+    int ix = int(cell % uint(MESH_G)) + corner[k].x;
+    int iy = (MESH_G - 1 - int(cell / uint(MESH_G))) + corner[k].y;   // od najdalszego rzędu (malarz)
+    float2 p = float2(ix, iy) / float(MESH_G);
+    float2 tc = float2(p.x, 1.0 - p.y);
+    constexpr sampler s(filter::linear, address::clamp_to_edge);
+    float h = tex.sample(s, tc, level(0)).a;
+    float3 w = float3((p.x * 2.0 - 1.0) * u.aspect, h * u.hscale, p.y * 2.0 - 1.0);
+    float cp = cos(u.pitch), sp = sin(u.pitch);
+    float sy = w.z * cp + w.y * sp;
+    float dc = w.y * cp - w.z * sp;
+    const float D = 3.0;
+    float wd = D - dc;
+    float f = D * mix(0.95, 0.68, saturate(u.pitch / 1.3));
+    MeshOut o;
+    o.position = float4(w.x / u.aspect * f / wd, sy * f / wd, saturate((wd - 1.0) / 8.0), 1.0);
+    o.tc = tc;
+    o.wz = w.z;
+    return o;
+}
+
+fragment float4 fragmentMesh(MeshOut in [[stage_in]],
+                             constant Uniforms &u [[buffer(0)]],
+                             texture2d<float> tex [[texture(0)]]) {
+    constexpr sampler s(filter::linear, address::clamp_to_edge);
+    float2 px = 1.0 / float2(tex.get_width(), tex.get_height());
+    float4 c = tex.sample(s, in.tc);
+    float hx = tex.sample(s, in.tc + float2(px.x * 1.5, 0)).a - tex.sample(s, in.tc - float2(px.x * 1.5, 0)).a;
+    float hy = tex.sample(s, in.tc + float2(0, px.y * 1.5)).a - tex.sample(s, in.tc - float2(0, px.y * 1.5)).a;
+    float dxw = 2.0 * u.aspect * px.x * 3.0;
+    float dzw = 2.0 * px.y * 3.0;
+    float3 n = normalize(float3(-u.hscale * hx / dxw, 1.0, u.hscale * hy / dzw));
+    const float3 L = normalize(float3(-0.45, 0.75, 0.5));
+    float cp = cos(u.pitch), sp = sin(u.pitch);
+    float3 V = float3(0.0, cp, -sp);
+    float diff = saturate(dot(n, L));
+    float spec = pow(saturate(dot(n, normalize(L + V))), 40.0) * 0.22;
+    float3 col = c.rgb * (0.30 + 0.95 * diff) + spec;
+    col *= mix(1.0, 0.45, smoothstep(-0.5, 1.0, in.wz) * sin(u.pitch));   // mgła w oddali
+    col *= mix(1.0, 0.75, smoothstep(0.7, 1.4, length(in.tc - 0.5) * 2.0));
     float noise = fract(sin(dot(in.position.xy, float2(12.9898, 78.233))) * 43758.5453);
     col += (noise - 0.5) / 255.0;
     return float4(saturate(col), 1.0);
