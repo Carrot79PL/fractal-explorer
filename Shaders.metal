@@ -31,6 +31,8 @@ struct Uniforms {
     int    invert;
     int    kaleido;   // liczba segmentów kalejdoskopu (0/1 = wyłączony)
     int    interior;  // kolorowe wnętrze zbioru
+    float  span;      // 3D: ile razy większy obszar niż widok obejmuje tekstura pola
+    float  pad2;
 };
 
 struct VSOut {
@@ -281,7 +283,7 @@ fragment float4 fragmentField(VSOut in [[stage_in]],
                               constant Uniforms &u [[buffer(0)]],
                               constant float2 *ref [[buffer(1)]],
                               constant float4 *pal [[buffer(2)]]) {
-    PointResult r = evalPoint(viewVec(in.uv, u), u, ref);
+    PointResult r = evalPoint(viewVec(in.uv * u.span, u), u, ref);
     float hh;
     float3 col = grade(colorOf(r, u, pal, hh), u);
     float h = 1.0;
@@ -289,15 +291,23 @@ fragment float4 fragmentField(VSOut in [[stage_in]],
     return float4(col, h);
 }
 
-// MARK: Tryb 3D – przebieg 2: siatka z przesunięciem wierzchołków wg wysokości
+// MARK: Tryb 3D – przebieg 2: nieskończony teren do horyzontu (tekstura powtarzana lustrzanie + mgła)
 
 struct MeshOut {
     float4 position [[position]];
     float2 tc;
     float  wz;
+    float  zmax;
 };
 
 constant int MESH_G = 320;
+constant float Z_NEAR = -4.5;
+constant float Z_FAR = 60.0;
+constant float CAM_D = 6.0;
+
+static float camF(constant Uniforms &u) { return CAM_D * mix(0.95, 0.68, saturate(u.pitch / 1.3)); }
+
+constexpr sampler fieldSampler(filter::linear, mip_filter::linear, address::mirrored_repeat);
 
 vertex MeshOut vertexMesh(uint vid [[vertex_id]],
                           constant Uniforms &u [[buffer(0)]],
@@ -307,33 +317,51 @@ vertex MeshOut vertexMesh(uint vid [[vertex_id]],
     int ix = int(cell % uint(MESH_G)) + corner[k].x;
     int iy = (MESH_G - 1 - int(cell / uint(MESH_G))) + corner[k].y;   // od najdalszego rzędu (malarz)
     float2 p = float2(ix, iy) / float(MESH_G);
-    float2 tc = float2(p.x, 1.0 - p.y);
-    constexpr sampler s(filter::linear, address::clamp_to_edge);
-    float h = tex.sample(s, tc, level(0)).a;
-    float3 w = float3((p.x * 2.0 - 1.0) * u.aspect, h * u.hscale, p.y * 2.0 - 1.0);
     float cp = cos(u.pitch), sp = sin(u.pitch);
-    float sy = w.z * cp + w.y * sp;
-    float dc = w.y * cp - w.z * sp;
-    const float D = 3.0;
-    float wd = D - dc;
-    float f = D * mix(0.95, 0.68, saturate(u.pitch / 1.3));
+    float f = camF(u);
+    float z = Z_NEAR + (Z_FAR - Z_NEAR) * pow(p.y, 2.2);
+    float xh = u.aspect * max(1.1, (CAM_D + max(z, 0.0) * sp) / f * 1.2 + 0.3);
+    float x = (p.x * 2.0 - 1.0) * xh;
+    float2 tc = float2(x / (u.aspect * u.span) * 0.5 + 0.5, 0.5 - z / (2.0 * u.span));
+    float h = tex.sample(fieldSampler, tc, level(2.5)).a;
+    float y = h * u.hscale;
+    float sy = z * cp + y * sp;
+    float dc = y * cp - z * sp;
+    float wd = CAM_D - dc;
     MeshOut o;
-    o.position = float4(w.x / u.aspect * f / wd, sy * f / wd, saturate((wd - 1.0) / 8.0), 1.0);
+    o.position = float4(x / u.aspect * f / wd, sy * f / wd, saturate((wd - 1.0) / 40.0), 1.0);
     o.tc = tc;
-    o.wz = w.z;
+    o.wz = z;
+    o.zmax = Z_FAR;
     return o;
+}
+
+static float3 hazeColor(constant Uniforms &u, constant float4 *pal) {
+    return palMix(pal, u, 0.35 + u.time) * 0.30 + float3(0.035, 0.045, 0.09);
+}
+
+fragment float4 fragmentSky(VSOut in [[stage_in]],
+                            constant Uniforms &u [[buffer(0)]],
+                            constant float4 *pal [[buffer(2)]]) {
+    float sp = sin(u.pitch), cp = cos(u.pitch);
+    float hy = sp > 0.02 ? camF(u) * cp / sp : 10.0;
+    float3 haze = hazeColor(u, pal);
+    float3 top = haze * 0.25 + float3(0.005, 0.008, 0.03);
+    float3 col = mix(haze, top, smoothstep(hy, hy + 1.3, in.uv.y));
+    float noise = fract(sin(dot(in.position.xy, float2(12.9898, 78.233))) * 43758.5453);
+    return float4(saturate(col + (noise - 0.5) / 255.0), 1.0);
 }
 
 fragment float4 fragmentMesh(MeshOut in [[stage_in]],
                              constant Uniforms &u [[buffer(0)]],
+                             constant float4 *pal [[buffer(2)]],
                              texture2d<float> tex [[texture(0)]]) {
-    constexpr sampler s(filter::linear, address::clamp_to_edge);
     float2 px = 1.0 / float2(tex.get_width(), tex.get_height());
-    float4 c = tex.sample(s, in.tc);
-    float hx = tex.sample(s, in.tc + float2(px.x * 1.5, 0)).a - tex.sample(s, in.tc - float2(px.x * 1.5, 0)).a;
-    float hy = tex.sample(s, in.tc + float2(0, px.y * 1.5)).a - tex.sample(s, in.tc - float2(0, px.y * 1.5)).a;
-    float dxw = 2.0 * u.aspect * px.x * 3.0;
-    float dzw = 2.0 * px.y * 3.0;
+    float4 c = tex.sample(fieldSampler, in.tc);
+    float hx = tex.sample(fieldSampler, in.tc + float2(px.x * 1.5, 0)).a - tex.sample(fieldSampler, in.tc - float2(px.x * 1.5, 0)).a;
+    float hy = tex.sample(fieldSampler, in.tc + float2(0, px.y * 1.5)).a - tex.sample(fieldSampler, in.tc - float2(0, px.y * 1.5)).a;
+    float dxw = 2.0 * u.aspect * u.span * px.x * 3.0;
+    float dzw = 2.0 * u.span * px.y * 3.0;
     float3 n = normalize(float3(-u.hscale * hx / dxw, 1.0, u.hscale * hy / dzw));
     const float3 L = normalize(float3(-0.45, 0.75, 0.5));
     float cp = cos(u.pitch), sp = sin(u.pitch);
@@ -341,8 +369,11 @@ fragment float4 fragmentMesh(MeshOut in [[stage_in]],
     float diff = saturate(dot(n, L));
     float spec = pow(saturate(dot(n, normalize(L + V))), 40.0) * 0.22;
     float3 col = c.rgb * (0.30 + 0.95 * diff) + spec;
-    col *= mix(1.0, 0.45, smoothstep(-0.5, 1.0, in.wz) * sin(u.pitch));   // mgła w oddali
-    col *= mix(1.0, 0.75, smoothstep(0.7, 1.4, length(in.tc - 0.5) * 2.0));
+    // mgła do horyzontu (kolor zgodny z niebem)
+    float d = max(in.wz + 1.3, 0.0);
+    float fog = saturate(1.0 - exp(-d * 0.10));
+    fog = mix(fog, 1.0, smoothstep(0.75, 1.0, d / (Z_FAR + 1.3)));
+    col = mix(col, hazeColor(u, pal), fog);
     float noise = fract(sin(dot(in.position.xy, float2(12.9898, 78.233))) * 43758.5453);
     col += (noise - 0.5) / 255.0;
     return float4(saturate(col), 1.0);

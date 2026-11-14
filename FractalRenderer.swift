@@ -44,7 +44,7 @@ struct DD2 {
     SIMD2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
 }
 
-/// Układ musi odpowiadać `struct Uniforms` w Shaders.metal (128 bajtów).
+/// Układ musi odpowiadać `struct Uniforms` w Shaders.metal (136 bajtów).
 struct FractalUniforms {
     var dcOff: SIMD2<Float>
     var center: SIMD2<Float>
@@ -74,6 +74,8 @@ struct FractalUniforms {
     var invert: Int32 = 0
     var kaleido: Int32 = 0
     var interior: Int32 = 0
+    var span: Float = 1
+    var pad2: Float = 0
 }
 
 enum ExportSize: Int, CaseIterable, Identifiable {
@@ -86,6 +88,7 @@ enum ExportSize: Int, CaseIterable, Identifiable {
 final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     static let maxOrbit = 20001
+    static let span3D = 2.5
     static var colorModes: [String] { [tr("Iteracje", "Iterations"), tr("Kąt", "Angle"), tr("Pułapka orbity", "Orbit trap")] }
 
     // MARK: Parametry publikowane do SwiftUI
@@ -127,8 +130,8 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
     @Published var contrast = 1.0 { didSet { wake() } }
     @Published var invert = false { didSet { wake() } }
     @Published var mode3D = false { didSet { lastInput = CACurrentMediaTime(); wake() } }
-    @Published var pitchDeg = 55.0 { didSet { wake() } }
-    @Published var heightScale = 0.55 { didSet { wake() } }
+    @Published var pitchDeg = 66.0 { didSet { wake() } }
+    @Published var heightScale = 0.35 { didSet { wake() } }
     @Published var musicOn = false {
         didSet {
             if musicOn { if music == nil { music = AmbientMusic() }; music?.setVolume(musicVolume) }
@@ -154,6 +157,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
     private let pipeline: MTLRenderPipelineState
     private let fieldPipeline: MTLRenderPipelineState
     private let meshPipeline: MTLRenderPipelineState
+    private let skyPipeline: MTLRenderPipelineState
     private var fieldTex: MTLTexture?
     private weak var view: MTKView?
     private var orbitBuffers: [MTLBuffer] = []
@@ -247,7 +251,12 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         m.vertexFunction = library.makeFunction(name: "vertexMesh")
         m.fragmentFunction = library.makeFunction(name: "fragmentMesh")
         m.colorAttachments[0].pixelFormat = .bgra8Unorm
+        let k = MTLRenderPipelineDescriptor()
+        k.vertexFunction = library.makeFunction(name: "vertexMain")
+        k.fragmentFunction = library.makeFunction(name: "fragmentSky")
+        k.colorAttachments[0].pixelFormat = .bgra8Unorm
         do {
+            skyPipeline = try device.makeRenderPipelineState(descriptor: k)
             fieldPipeline = try device.makeRenderPipelineState(descriptor: f)
             meshPipeline = try device.makeRenderPipelineState(descriptor: m)
         } catch { fatalError("Pipeline 3D: \(error)") }
@@ -470,7 +479,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
             let g = 3
             for gy in -g...g {
                 for gx in -g...g {
-                    let vec = rotv(SIMD2(Double(gx) / Double(g) * aspect, Double(gy) / Double(g)))
+                    let vec = rotv(SIMD2(Double(gx) / Double(g) * aspect, Double(gy) / Double(g) * (aspect > 0 ? (mode3D ? Self.span3D : 1) : 1)))
                     let n = probeIterations(dcs: vec, s: s, Z: d, cap: cap)
                     if n > best { best = n; bestVec = vec }
                 }
@@ -517,10 +526,11 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
                                saturation: Float(saturation),
                                contrast: Float(contrast),
                                pitch: Float(pitchDeg * .pi / 180),
-                               hscale: Float(heightScale * 0.6),
+                               hscale: Float(heightScale * 0.6 * (mode3D ? Self.span3D : 1)),
                                invert: invert ? 1 : 0,
                                kaleido: Int32(kaleido),
-                               interior: (interiorColor || mode3D) ? 1 : 0)
+                               interior: (interiorColor || mode3D) ? 1 : 0,
+                               span: Float(mode3D ? Self.span3D : 1))
     }
 
     private func updateHUD(force: Bool) {
@@ -624,7 +634,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let itersFull = effectiveIterations(for: scale)
         let iters = itersFull
         if moving { restStage = 0 }
-        if model == .mandelbrot { let t0 = CACurrentMediaTime(); prepareOrbit(needed: iters, aspect: aspect); dbgOrbit += (CACurrentMediaTime() - t0) * 1000 }
+        if model == .mandelbrot { let t0 = CACurrentMediaTime(); prepareOrbit(needed: iters, aspect: aspect * (mode3D ? Self.span3D : 1)); dbgOrbit += (CACurrentMediaTime() - t0) * 1000 }
 
         inflight.wait()
         guard let cb = queue.makeCommandBuffer() else { inflight.signal(); return }
@@ -638,7 +648,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let aa = (!mode3D && antialias && !moving && restStage >= 1 && restAAOK) ? 2 : 1
         let uni = makeUniforms(aspect: aspect, pixelsHigh: Int(want.height), maxIter: iters, aa: aa)
         var drew = false
-        if mode3D, let ftex = fieldTexture(width: Int(want.width), height: Int(want.height)) {
+        if mode3D, let ftex = fieldTexture(width: min(4096, Int(want.width * 1.5)), height: min(4096, Int(want.height * 1.5))) {
             let fp = MTLRenderPassDescriptor()
             fp.colorAttachments[0].texture = ftex
             fp.colorAttachments[0].loadAction = .dontCare
@@ -646,6 +656,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
             if let e1 = cb.makeRenderCommandEncoder(descriptor: fp) {
                 encode(e1, uniforms: uni, orbit: buf, pipelineOverride: fieldPipeline)
                 e1.endEncoding()
+                if let bl = cb.makeBlitCommandEncoder() { bl.generateMipmaps(for: ftex); bl.endEncoding() }
                 if let enc = cb.makeRenderCommandEncoder(descriptor: rpd) {
                     encodeMesh(enc, uniforms: uni, tex: ftex)
                     enc.endEncoding()
@@ -702,7 +713,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     private func fieldTexture(width: Int, height: Int) -> MTLTexture? {
         if let t = fieldTex, t.width == width, t.height == height { return t }
-        let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
+        let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: true)
         d.usage = [.renderTarget, .shaderRead]
         d.storageMode = .private
         fieldTex = device.makeTexture(descriptor: d)
@@ -711,7 +722,14 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     private func encodeMesh(_ enc: MTLRenderCommandEncoder, uniforms: FractalUniforms, tex: MTLTexture) {
         var u = uniforms
+        var pal = Palettes.packed()
+        let palLen = pal.count * MemoryLayout<SIMD4<Float>>.stride
+        enc.setRenderPipelineState(skyPipeline)
+        enc.setFragmentBytes(&u, length: MemoryLayout<FractalUniforms>.stride, index: 0)
+        enc.setFragmentBytes(&pal, length: palLen, index: 2)
+        enc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         enc.setRenderPipelineState(meshPipeline)
+        enc.setFragmentBytes(&pal, length: palLen, index: 2)
         enc.setVertexBytes(&u, length: MemoryLayout<FractalUniforms>.stride, index: 0)
         enc.setVertexTexture(tex, index: 0)
         enc.setFragmentBytes(&u, length: MemoryLayout<FractalUniforms>.stride, index: 0)
@@ -755,7 +773,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let u = makeUniforms(aspect: asp, pixelsHigh: height, maxIter: iters, aa: (antialias && !is3D) ? 2 : 1, fade: false)
         var ftex: MTLTexture?
         if is3D {
-            let fd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
+            let fd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: true)
             fd.usage = [.renderTarget, .shaderRead]
             fd.storageMode = .private
             ftex = device.makeTexture(descriptor: fd)
@@ -779,6 +797,9 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
             cb.waitUntilCompleted()
         }
         if is3D, let ftex = ftex {
+            if let cb = queue.makeCommandBuffer(), let bl = cb.makeBlitCommandEncoder() {
+                bl.generateMipmaps(for: ftex); bl.endEncoding(); cb.commit(); cb.waitUntilCompleted()
+            }
             let rpd = MTLRenderPassDescriptor()
             rpd.colorAttachments[0].texture = tex
             rpd.colorAttachments[0].loadAction = .clear

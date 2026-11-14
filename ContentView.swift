@@ -365,7 +365,7 @@ private struct Inspector: View {
             Card(title: "3D", symbol: "cube") {
                 Toggle(tr("Krajobraz 3D (D)", "3D landscape (D)"), isOn: $renderer.mode3D).font(.callout)
                 if renderer.mode3D {
-                    SliderRow(tr("Nachylenie", "Tilt"), value: $renderer.pitchDeg, range: 0...78, format: "%.0f°")
+                    SliderRow(tr("Nachylenie", "Tilt"), value: $renderer.pitchDeg, range: 0...85, format: "%.0f°")
                     SliderRow(tr("Wysokość", "Height"), value: $renderer.heightScale, range: 0...1.5, format: "%.2f")
                     Text(tr("W trybie 3D zoom celuje w środek widoku.", "In 3D mode, zoom targets the view center."))
                         .font(.caption2).foregroundStyle(.secondary)

@@ -25,7 +25,7 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 - **Miejsca:** 8 gotowych widoków + własne ulubione (zapamiętywane).
 - **Eksport PNG** w 4K i 8K.
 - **Obrót widoku** (gest obrotu na gładziku, klawisze `Q`/`E`, suwak, automatyczny obrót).
-- **Krajobraz 3D:** fraktal jako teren z oświetleniem, regulowane nachylenie i wysokość; działa z obrotem i zoomem.
+- **Krajobraz 3D:** fraktal jako oświetlony teren sięgający horyzontu (lustrzane kafelki, mgła, niebo), regulowane nachylenie i wysokość; działa z obrotem i zoomem.
 - **Muzyka ambient:** generowana na żywo (akordy, dzwonki, pogłos); im głębszy zoom, tym jaśniejsze brzmienie.
 - **Więcej efektów:** kalejdoskop, kolorowe wnętrze zbioru, nasycenie, kontrast, odwrócenie kolorów.
 - **Dwujęzyczny interfejs PL/EN** (przycisk w prawym górnym rogu).
@@ -84,7 +84,7 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 - **Places:** 8 built-in views plus your own persistent favorites.
 - **PNG export** in 4K and 8K.
 - **View rotation** (trackpad rotate gesture, `Q`/`E` keys, slider, auto-rotate).
-- **3D landscape:** the fractal as a lit terrain with adjustable tilt and height; works with rotation and zoom.
+- **3D landscape:** the fractal as a lit terrain stretching to the horizon (mirrored tiles, haze, sky), with adjustable tilt and height; works with rotation and zoom.
 - **Ambient music:** generated live (chords, bells, reverb); the deeper the zoom, the brighter the sound.
 - **More effects:** kaleidoscope, colored set interior, saturation, contrast, color inversion.
 - **Bilingual UI, PL/EN** (button in the top-right corner).
