@@ -7,12 +7,30 @@ final class SplashModel: ObservableObject {
     @Published var status = ""
 }
 
-struct SplashView: View {
+/// Pasek postępu w osobnym widoku: odświeża się tylko on, a nie całe tło (obraz był dekodowany od nowa i migał).
+private struct SplashProgress: View {
     @ObservedObject var model: SplashModel
 
     var body: some View {
+        VStack(spacing: 6) {
+            ProgressView(value: model.progress)
+                .progressViewStyle(.linear).tint(.white.opacity(0.9)).frame(height: 3)
+            HStack {
+                Text(model.status).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                Text("v1.2").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+            }
+        }
+    }
+}
+
+struct SplashView: View {
+    let model: SplashModel
+    private static let image: NSImage? = Bundle.main.url(forResource: "splash", withExtension: "jpg").flatMap { NSImage(contentsOf: $0) }
+
+    var body: some View {
         ZStack(alignment: .bottomLeading) {
-            if let img = NSImage(contentsOf: Bundle.main.url(forResource: "splash", withExtension: "jpg") ?? URL(fileURLWithPath: "/dev/null")) {
+            if let img = Self.image {
                 Image(nsImage: img).resizable().scaledToFill()
             } else {
                 LinearGradient(colors: [.indigo, .black], startPoint: .top, endPoint: .bottom)
@@ -35,13 +53,7 @@ struct SplashView: View {
                     .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
                     .padding(.top, 4)
                 Spacer().frame(height: 14)
-                ProgressView(value: model.progress)
-                    .progressViewStyle(.linear).tint(.white.opacity(0.9)).frame(height: 3)
-                HStack {
-                    Text(model.status).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
-                    Spacer()
-                    Text("v1.2").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
-                }
+                SplashProgress(model: model)
             }
             .padding(.horizontal, 32).padding(.bottom, 24)
         }
@@ -91,7 +103,7 @@ final class SplashController {
 
         for (i, s) in Self.steps.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5 + Double(i) * 0.55) { [weak self] in
-                withAnimation(.easeOut(duration: 0.5)) { self?.model.progress = s.0 }
+                self?.model.progress = s.0
                 self?.model.status = tr(s.1, s.2)
             }
         }
