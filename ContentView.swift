@@ -139,6 +139,7 @@ struct ContentView: View {
             Label(tr("Kółko / pinch – zoom", "Scroll / pinch – zoom"), systemImage: "plus.magnifyingglass")
             Label(tr("Przeciągnij – przesuń", "Drag – pan"), systemImage: "hand.draw")
             Label(tr("Dwuklik – ×2", "Double-click – ×2"), systemImage: "cursorarrow.click.2")
+            Label(tr("Dwa palce – obrót", "Two fingers – rotate"), systemImage: "rotate.right")
             Label(tr("Kostka – niespodzianka", "Dice – surprise me"), systemImage: "dice")
         }
         .font(.system(size: 12))
@@ -226,8 +227,8 @@ struct ContentView: View {
                 }
             }
             Divider()
-            Text(tr("Zoom: kółko / pinch · Przesuwanie: przeciąganie · Obrót: gest obrotu na gładziku · Dwuklik: ×2",
-                    "Zoom: wheel / pinch · Pan: drag · Rotate: trackpad rotate gesture · Double-click: ×2"))
+            Text(tr("Zoom: kółko / pinch · Przesuwanie: przeciąganie · Obrót: skręć dwa palce na gładziku lub ⌥ + przeciąganie · Dwuklik: ×2",
+                    "Zoom: wheel / pinch · Pan: drag · Rotate: twist two fingers on the trackpad or ⌥ + drag · Double-click: ×2"))
                 .font(.caption).foregroundStyle(Color.white.opacity(0.66)).frame(width: 360, alignment: .leading)
         }
         .padding(22)
@@ -534,7 +535,7 @@ private struct OptionsPanel: View {
                 if renderer.autoRotate {
                     SliderRow(tr("Prędkość", "Speed"), value: $renderer.rotateSpeed, range: -40...40, format: "%.0f°/s")
                 }
-                Text(tr("Gest obrotu na gładziku, klawisze Q / E.", "Trackpad rotate gesture, keys Q / E."))
+                Text(tr("Skręć dwa palce na gładziku (wokół kursora), ⌥ + przeciąganie lub klawisze Q / E.", "Twist two fingers on the trackpad (around the cursor), ⌥ + drag, or keys Q / E."))
                     .font(.caption2).foregroundStyle(Color.white.opacity(0.66))
             }
             Card(title: "3D", symbol: "cube") {

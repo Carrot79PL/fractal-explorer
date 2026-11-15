@@ -46,6 +46,16 @@ final class InteractiveMTKView: MTKView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if event.modifierFlags.contains(.option) {
+            // ⌥ + przeciąganie: obrót „jak kółko" wokół środka widoku.
+            let cur = point(event)
+            let prev = CGPoint(x: cur.x - event.deltaX, y: cur.y + event.deltaY)
+            let cx = bounds.midX, cy = bounds.midY
+            var d = atan2(cur.y - cy, cur.x - cx) - atan2(prev.y - cy, prev.x - cx)
+            if d > .pi { d -= 2 * .pi } else if d < -.pi { d += 2 * .pi }
+            renderer?.rotate(by: Double(d) * 180 / .pi, at: CGPoint(x: cx, y: cy), in: bounds.size)
+            return
+        }
         renderer?.pan(dx: event.deltaX, dy: event.deltaY, in: bounds.size)
         renderer?.cursorMoved(to: point(event), in: bounds.size)
     }
@@ -57,7 +67,7 @@ final class InteractiveMTKView: MTKView {
     }
 
     override func rotate(with event: NSEvent) {
-        renderer?.rotateBy(degrees: Double(event.rotation))
+        renderer?.rotate(by: Double(event.rotation), at: point(event), in: bounds.size)
     }
 
     override func magnify(with event: NSEvent) {

@@ -202,6 +202,24 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
                       digits, c.x.hi, digits, c.y.hi, model.homeScale / scale, model.title)
     }
 
+    /// Obrót wokół punktu pod kursorem (jak zoom): punkt pod palcami zostaje w miejscu. W 3D – wokół środka.
+    func rotate(by degrees: Double, at p: CGPoint, in size: CGSize) {
+        guard size.height > 0, degrees.isFinite else { return }
+        autoZoom = false
+        homing = false
+        let a = Double(size.width / size.height)
+        let u = mode3D ? SIMD2<Double>(0, 0) : uv(for: p, in: size)
+        let vec = SIMD2(u.x * a, u.y)
+        let c = center
+        let pv = rotv(vec)
+        anchor = DD2(x: c.x + DD(pv.x * scale), y: c.y + DD(pv.y * scale))
+        anchorVec = vec
+        cursorUV = u
+        angleRad -= degrees * .pi / 180
+        lastInput = CACurrentMediaTime()
+        wake()
+    }
+
     func rotateBy(degrees: Double) {
         setAngle(angleRad - degrees * .pi / 180)
         lastInput = CACurrentMediaTime()
