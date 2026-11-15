@@ -265,6 +265,7 @@ struct ContentView: View {
             .fixedSize()
             .help(tr("Gotowe style: paleta + efekty jednym kliknięciem", "Ready-made looks: palette + effects in one click"))
 
+            if !isPro {
             Divider().frame(height: 22)
 
             if inlinePalettes {
@@ -290,6 +291,7 @@ struct ContentView: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
+            }   // w Pro paletę wybiera się z karty Kolor (ikona obok)
 
             Divider().frame(height: 22)
 

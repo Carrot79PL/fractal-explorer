@@ -66,8 +66,29 @@ final class InteractiveMTKView: MTKView {
         renderer?.zoom(by: factor, at: point(event), in: bounds.size)
     }
 
+    // Gest obrotu: martwa strefa (żeby pinch nie kręcił obrazu przypadkiem), stały punkt obrotu z początku gestu, magnes na 45°.
+    private var rotAccum = 0.0
+    private var rotActive = false
+    private var rotPivot = CGPoint.zero
+
     override func rotate(with event: NSEvent) {
-        renderer?.rotate(by: Double(event.rotation), at: point(event), in: bounds.size)
+        if event.phase.contains(.began) || event.phase.contains(.mayBegin) {
+            rotAccum = 0; rotActive = false; rotPivot = point(event)
+        }
+        let r = Double(event.rotation)
+        if !rotActive {
+            rotAccum += r
+            if abs(rotAccum) > 6 {
+                rotActive = true
+                renderer?.rotate(by: rotAccum - (rotAccum > 0 ? 6 : -6), at: rotPivot, in: bounds.size)
+            }
+        } else {
+            renderer?.rotate(by: r, at: rotPivot, in: bounds.size)
+        }
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            if rotActive { renderer?.snapRotation() }
+            rotActive = false; rotAccum = 0
+        }
     }
 
     override func magnify(with event: NSEvent) {

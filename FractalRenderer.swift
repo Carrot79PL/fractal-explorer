@@ -202,6 +202,10 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
                       digits, c.x.hi, digits, c.y.hi, model.homeScale / scale, model.title)
     }
 
+    // Obrót gładki: kolejka kątów (pendingRot) zużywana w step() z tłumieniem, wokół stałego punktu (pivot).
+    private var pendingRot = 0.0
+    private var pivotVec = SIMD2<Double>(0, 0)
+
     /// Obrót wokół punktu pod kursorem (jak zoom): punkt pod palcami zostaje w miejscu. W 3D – wokół środka.
     func rotate(by degrees: Double, at p: CGPoint, in size: CGSize) {
         guard size.height > 0, degrees.isFinite else { return }
@@ -209,20 +213,39 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         homing = false
         let a = Double(size.width / size.height)
         let u = mode3D ? SIMD2<Double>(0, 0) : uv(for: p, in: size)
-        let vec = SIMD2(u.x * a, u.y)
-        let c = center
-        let pv = rotv(vec)
-        anchor = DD2(x: c.x + DD(pv.x * scale), y: c.y + DD(pv.y * scale))
-        anchorVec = vec
+        pivotVec = SIMD2(u.x * a, u.y)
         cursorUV = u
-        angleRad -= degrees * .pi / 180
+        pendingRot -= degrees * .pi / 180
         lastInput = CACurrentMediaTime()
         wake()
     }
 
+    /// Po zakończeniu gestu: „magnes" na wielokrotności 45° (z tolerancją 4°), np. żeby łatwo wrócić do 0°.
+    func snapRotation() {
+        let target = angleRad + pendingRot
+        let step = Double.pi / 4
+        let nearest = (target / step).rounded() * step
+        if abs(target - nearest) < 4 * .pi / 180 { pendingRot = nearest - angleRad }
+        wake()
+    }
+
+    private func applyPendingRotation(dt: Double) -> Bool {
+        guard abs(pendingRot) > 1e-5 else { pendingRot = 0; return false }
+        let delta = pendingRot * (1 - exp(-dt * 18))
+        pendingRot -= delta
+        let c = center
+        let pv = rotv(pivotVec)
+        anchor = DD2(x: c.x + DD(pv.x * scale), y: c.y + DD(pv.y * scale))
+        anchorVec = pivotVec
+        angleRad += delta
+        return true
+    }
+
     func rotateBy(degrees: Double) {
-        setAngle(angleRad - degrees * .pi / 180)
+        pivotVec = .zero
+        pendingRot -= degrees * .pi / 180
         lastInput = CACurrentMediaTime()
+        wake()
     }
 
     // MARK: Orbita referencyjna (tylko Mandelbrot)
@@ -680,6 +703,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 }
             }
         }
+        if applyPendingRotation(dt: dt) { animating = true }
         if autoRotate {
             setAngle(angleRad + rotateSpeed * .pi / 180 * dt)
             animating = true
