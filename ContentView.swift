@@ -541,7 +541,7 @@ private struct Inspector: View {
             if !renderer.favorites.isEmpty {
                 Divider()
                 ForEach(renderer.favorites) { v in
-                    PlaceRow(title: v.name, symbol: "star.fill", onDelete: { renderer.deleteFavorite(v) }) {
+                    PlaceRow(title: v.name, symbol: "star.fill", onRename: { renderer.renameFavorite(v) }, onDelete: { renderer.deleteFavorite(v) }) {
                         renderer.go(to: v)
                     }
                 }
@@ -632,6 +632,7 @@ private struct PaletteChip: View {
 private struct PlaceRow: View {
     let title: String
     let symbol: String
+    var onRename: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
     let action: () -> Void
     @State private var hover = false
@@ -645,6 +646,11 @@ private struct PlaceRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            if let onRename {
+                Button(action: onRename) { Image(systemName: "pencil").font(.caption) }
+                    .buttonStyle(.plain).foregroundStyle(Color.white.opacity(0.66))
+                    .help(tr("Zmień nazwę", "Rename"))
+            }
             if let onDelete {
                 Button(action: onDelete) { Image(systemName: "trash").font(.caption) }
                     .buttonStyle(.plain).foregroundStyle(Color.white.opacity(0.66))

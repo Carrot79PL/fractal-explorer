@@ -356,9 +356,33 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         wake()
     }
 
+    /// Okno z polem tekstowym na nazwę miejsca; zwraca nil po anulowaniu.
+    private func promptForName(title: String, initial: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = tr("Podaj nazwę, pod którą miejsce pojawi się na liście.", "Enter the name this place will have in the list.")
+        alert.addButton(withTitle: tr("Zapisz", "Save"))
+        alert.addButton(withTitle: tr("Anuluj", "Cancel"))
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.stringValue = initial
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let t = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? initial : t
+    }
+
     func saveFavorite() {
-        let name = "\(tr("Widok", "View")) \(favorites.count + 1) · \(zoomText)"
+        let suggestion = "\(tr("Widok", "View")) \(favorites.count + 1) · \(zoomText)"
+        guard let name = promptForName(title: tr("Nazwa nowego miejsca", "New place name"), initial: suggestion) else { return }
         favorites.append(currentView(name: name))
+        persistFavorites()
+    }
+
+    func renameFavorite(_ v: SavedView) {
+        guard let i = favorites.firstIndex(where: { $0.id == v.id }),
+              let name = promptForName(title: tr("Zmień nazwę miejsca", "Rename place"), initial: v.name) else { return }
+        favorites[i].name = name
         persistFavorites()
     }
 
