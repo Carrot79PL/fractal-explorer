@@ -29,7 +29,7 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 - **Adaptacyjna rozdzielczość** w ruchu, by utrzymać płynność; pełna jakość po zatrzymaniu.
 - **Miejsca:** 8 gotowych widoków + własne ulubione z nazwami (zapamiętują pozycję i WSZYSTKIE ustawienia wyglądu).
 - **Eksport PNG** w 4K i 8K.
-- **Obrót widoku** (gest obrotu na gładziku, klawisze `Q`/`E`, suwak, automatyczny obrót).
+- **Obrót widoku:** skręć dwa palce na gładziku (wokół kursora, z martwą strefą, tłumieniem i „magnesem” na 45°), `⌥` + przeciąganie, klawisze `Q`/`E`, suwak, automatyczny obrót.
 - **Krajobraz 3D:** fraktal jako oświetlony teren sięgający horyzontu (lustrzane kafelki, mgła, niebo), regulowane nachylenie i wysokość; działa z obrotem i zoomem.
 - **Muzyka ambient:** generowana na żywo (akordy, dzwonki, pogłos); im głębszy zoom, tym jaśniejsze brzmienie.
 - **Więcej efektów:** kalejdoskop, kolorowe wnętrze zbioru, nasycenie, kontrast, odwrócenie kolorów.
@@ -42,7 +42,7 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 | `1`–`6` | wybór modelu |
 | `Spacja` | film: automatyczne powiększanie |
 | `R` | reset widoku |
-| `I` | panel ustawień |
+| `I` | zamknij kartę opcji |
 | `H` | ukryj / pokaż interfejs |
 | `Q` / `E` | obrót widoku |
 | `D` | krajobraz 3D |
@@ -94,7 +94,7 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 - **Adaptive resolution** while moving to stay smooth; full quality once you stop.
 - **Places:** 8 built-in views plus your own named favorites (they store the position and ALL look settings).
 - **PNG export** in 4K and 8K.
-- **View rotation** (trackpad rotate gesture, `Q`/`E` keys, slider, auto-rotate).
+- **View rotation:** twist two fingers on the trackpad (around the cursor, with a dead zone, damping and a 45° snap), `⌥` + drag, `Q`/`E` keys, slider, auto-rotate.
 - **3D landscape:** the fractal as a lit terrain stretching to the horizon (mirrored tiles, haze, sky), with adjustable tilt and height; works with rotation and zoom.
 - **Ambient music:** generated live (chords, bells, reverb); the deeper the zoom, the brighter the sound.
 - **More effects:** kaleidoscope, colored set interior, saturation, contrast, color inversion.
@@ -107,7 +107,7 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 | `1`–`6` | switch model |
 | `Space` | movie: auto-zoom |
 | `R` | reset view |
-| `I` | settings panel |
+| `I` | close options card |
 | `H` | hide / show interface |
 | `Q` / `E` | rotate view |
 | `D` | 3D landscape |
