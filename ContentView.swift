@@ -1,53 +1,53 @@
 import SwiftUI
 
 struct ContentView: View {
-    @AppStorage("lang") private var lang = Lang.current
     @StateObject private var renderer = FractalRenderer()
+    @AppStorage("lang") private var lang = Lang.current
+    @AppStorage("uiMode") private var uiMode = "easy"
     @State private var showUI = true
     @State private var showInspector = true
+    @State private var showHelp = false
+    @State private var showHint = true
+
+    private var isPro: Bool { uiMode == "pro" }
 
     var body: some View {
         ZStack {
             MetalFractalView(renderer: renderer)
                 .ignoresSafeArea()
 
-            // Warstwa interfejsu: ukrywana przezroczystością (układ się nie zmienia, nic nie znika z hierarchii).
+            // Warstwa interfejsu: ukrywana przezroczystością (układ się nie zmienia).
             VStack(spacing: 12) {
-                HStack(alignment: .top) {
-                    hud
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        brand
+                        hud
+                    }
                     Spacer()
-                    Color.clear.frame(width: 260, height: 40)
+                    Color.clear.frame(width: 300, height: 44)
                 }
                 HStack(alignment: .top) {
                     Spacer()
-                    if showInspector { Inspector(renderer: renderer) }
+                    if isPro && showInspector { Inspector(renderer: renderer) }
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
-                toolbar
+                if !isPro && showHint { hint }
+                ViewThatFits(in: .horizontal) {
+                    toolbar(inlinePalettes: true)
+                    toolbar(inlinePalettes: false)
+                }
             }
             .padding(20)
             .opacity(showUI ? 1 : 0)
             .allowsHitTesting(showUI)
             .animation(.smooth(duration: 0.3), value: showUI)
             .animation(.smooth(duration: 0.3), value: showInspector)
+            .animation(.smooth(duration: 0.3), value: uiMode)
 
-            // Ukryte skróty klawiszowe (działają także przy ukrytym interfejsie).
-            Group {
-                Button("") { renderer.rotateBy(degrees: 5) }.keyboardShortcut("q", modifiers: [])
-                Button("") { renderer.rotateBy(degrees: -5) }.keyboardShortcut("e", modifiers: [])
-                Button("") { renderer.mode3D.toggle() }.keyboardShortcut("d", modifiers: [])
-                Button("") { renderer.musicOn.toggle() }.keyboardShortcut("m", modifiers: [])
-            }
-            .frame(width: 0, height: 0)
-            .opacity(0)
+            shortcuts
+            cornerButtons
 
-            // Przyciski w rogu: zawsze na wierzchu i zawsze klikalne.
-            VStack {
-                HStack { Spacer(); topButtons }
-                Spacer()
-            }
-            .padding(20)
-
+            if showHelp { helpCard }
             if renderer.isExporting {
                 VStack(spacing: 10) {
                     ProgressView()
@@ -57,8 +57,30 @@ struct ContentView: View {
                 .glassCard()
             }
         }
-        .frame(minWidth: 960, minHeight: 560)
+        .frame(minWidth: 1000, minHeight: 600)
         .background(Color.black)
+        .preferredColorScheme(.dark)
+        .background(WindowAccessor { SplashController.shared.start(main: $0) })
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 14) { withAnimation { showHint = false } }
+        }
+    }
+
+    // MARK: Marka + przełącznik Easy / Pro
+
+    private var brand: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "circle.hexagongrid.fill")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(LinearGradient(colors: [.cyan, .white, .orange], startPoint: .topLeading, endPoint: .bottomTrailing))
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Fractal Explorer").font(.system(size: 13, weight: .semibold))
+                Text("Tomasz Marchewka").font(.system(size: 9)).foregroundStyle(Color.white.opacity(0.66))
+            }
+            ModeSwitch(isPro: Binding(get: { isPro }, set: { uiMode = $0 ? "pro" : "easy" }))
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+        .glassCard()
     }
 
     // MARK: HUD
@@ -68,134 +90,220 @@ struct ContentView: View {
             HStack(spacing: 6) {
                 Image(systemName: renderer.model.symbol)
                 Text(renderer.model.title).fontWeight(.semibold)
+                if isPro {
+                    Button { renderer.copyCoordinatesToPasteboard() } label: { Image(systemName: "doc.on.doc") }
+                        .buttonStyle(.plain).foregroundStyle(Color.white.opacity(0.66))
+                        .help(tr("Kopiuj współrzędne", "Copy coordinates"))
+                }
             }
             .font(.callout)
             .padding(.bottom, 2)
-            hudRow("Re", renderer.realText)
-            hudRow("Im", renderer.imagText + " i")
+            if isPro {
+                hudRow("Re", renderer.realText)
+                hudRow("Im", renderer.imagText + " i")
+            }
             hudRow("Zoom", renderer.zoomText)
-            hudRow("Iter", renderer.iterText)
-            if abs(renderer.angleDeg) > 0.5 { hudRow(tr("Kąt", "Angle"), String(format: "%.0f°", renderer.angleDeg)) }
-            Text(tr("Autor: Tomasz Marchewka", "Author: Tomasz Marchewka"))
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-                .padding(.top, 3)
+            if isPro {
+                hudRow("Iter", renderer.iterText)
+                if abs(renderer.angleDeg) > 0.5 { hudRow(tr("Kąt", "Angle"), String(format: "%.0f°", renderer.angleDeg)) }
+            }
         }
         .font(.system(.caption, design: .monospaced))
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .fixedSize()
         .glassCard()
-        .opacity(0.9)
-        .allowsHitTesting(false)
     }
 
     private func hudRow(_ label: String, _ value: String) -> some View {
         HStack(spacing: 8) {
-            Text(label).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+            Text(label).foregroundStyle(Color.white.opacity(0.66)).frame(width: 34, alignment: .leading)
             Text(value).foregroundStyle(.primary)
         }
     }
 
-    // MARK: Przyciski w rogu (zawsze widoczne)
-
-    private var topButtons: some View {
-        HStack(spacing: 8) {
-            Button { lang = (lang == "pl" ? "en" : "pl") } label: {
-                Text(lang == "pl" ? "PL" : "EN")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 20, height: 20)
-                    .padding(10)
-                    .glassCapsule()
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help(tr("Język: polski (kliknij, aby zmienić na English)", "Language: English (click to switch to Polski)"))
-            RoundButton(symbol: "cube", help: tr("Krajobraz 3D (D)", "3D landscape (D)"), active: renderer.mode3D) {
-                renderer.mode3D.toggle()
-            }
-            .opacity(showUI ? 1 : 0)
-            .allowsHitTesting(showUI)
-            RoundButton(symbol: renderer.musicOn ? "speaker.wave.2.fill" : "speaker.slash", help: tr("Muzyka ambient (M)", "Ambient music (M)"), active: renderer.musicOn) {
-                renderer.musicOn.toggle()
-            }
-            .opacity(showUI ? 1 : 0)
-            .allowsHitTesting(showUI)
-            RoundButton(symbol: "sidebar.right", help: tr("Panel ustawień (I)", "Settings panel (I)"), active: showInspector) {
-                if !showUI { showUI = true }
-                showInspector.toggle()
-            }
-            .keyboardShortcut("i", modifiers: [])
-            .opacity(showUI ? 1 : 0)
-            .allowsHitTesting(showUI)
-            RoundButton(symbol: showUI ? "eye.slash" : "eye", help: showUI ? tr("Ukryj interfejs (H)", "Hide interface (H)") : tr("Pokaż interfejs (H)", "Show interface (H)")) {
-                showUI.toggle()
-            }
-            .keyboardShortcut("h", modifiers: [])
-            .opacity(showUI ? 1 : 0.55)
+    private var hint: some View {
+        HStack(spacing: 18) {
+            Label(tr("Kółko / pinch – zoom", "Scroll / pinch – zoom"), systemImage: "plus.magnifyingglass")
+            Label(tr("Przeciągnij – przesuń", "Drag – pan"), systemImage: "hand.draw")
+            Label(tr("Dwuklik – ×2", "Double-click – ×2"), systemImage: "cursorarrow.click.2")
+            Label(tr("Kostka – niespodzianka", "Dice – surprise me"), systemImage: "dice")
         }
-        .animation(.smooth(duration: 0.3), value: showUI)
+        .font(.system(size: 12))
+        .foregroundStyle(Color.white.opacity(0.66))
+        .padding(.horizontal, 18).padding(.vertical, 9)
+        .glassCapsule()
+        .transition(.opacity)
+    }
+
+    // MARK: Przyciski w rogu (zawsze na wierzchu)
+
+    private var cornerButtons: some View {
+        VStack {
+            HStack {
+                Spacer()
+                HStack(spacing: 8) {
+                    Button { lang = (lang == "pl" ? "en" : "pl") } label: {
+                        Text(lang == "pl" ? "PL" : "EN")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 20, height: 20)
+                            .padding(10)
+                            .glassCapsule()
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help(tr("Język: polski (kliknij, aby zmienić na English)", "Language: English (click to switch to Polski)"))
+                    RoundButton(symbol: "questionmark", help: tr("Skróty klawiszowe (?)", "Keyboard shortcuts (?)"), active: showHelp) {
+                        withAnimation { showHelp.toggle() }
+                    }
+                    .opacity(showUI ? 1 : 0).allowsHitTesting(showUI)
+                    if isPro {
+                        RoundButton(symbol: "sidebar.right", help: tr("Panel ustawień (I)", "Settings panel (I)"), active: showInspector) {
+                            if !showUI { showUI = true }
+                            showInspector.toggle()
+                        }
+                        .opacity(showUI ? 1 : 0).allowsHitTesting(showUI)
+                    }
+                    RoundButton(symbol: showUI ? "eye.slash" : "eye",
+                                help: showUI ? tr("Ukryj interfejs (H)", "Hide interface (H)") : tr("Pokaż interfejs (H)", "Show interface (H)")) {
+                        showUI.toggle()
+                    }
+                    .opacity(showUI ? 1 : 0.55)
+                }
+                .animation(.smooth(duration: 0.3), value: showUI)
+            }
+            Spacer()
+        }
+        .padding(20)
+    }
+
+    // MARK: Skróty klawiszowe (jedno miejsce, działają także przy ukrytym interfejsie)
+
+    private var shortcuts: some View {
+        Group {
+            Button("") { renderer.autoZoom.toggle() }.keyboardShortcut(.space, modifiers: [])
+            Button("") { renderer.resetView() }.keyboardShortcut("r", modifiers: [])
+            Button("") { renderer.rotateBy(degrees: 5) }.keyboardShortcut("q", modifiers: [])
+            Button("") { renderer.rotateBy(degrees: -5) }.keyboardShortcut("e", modifiers: [])
+            Button("") { renderer.mode3D.toggle() }.keyboardShortcut("d", modifiers: [])
+            Button("") { renderer.musicOn.toggle() }.keyboardShortcut("m", modifiers: [])
+            Button("") { renderer.surprise() }.keyboardShortcut("s", modifiers: [])
+            Button("") { renderer.setTour(!renderer.tourOn) }.keyboardShortcut("t", modifiers: [])
+            Button("") { renderer.juliaFromCursor() }.keyboardShortcut("j", modifiers: [])
+            Button("") { withAnimation { showHelp.toggle() } }.keyboardShortcut("/", modifiers: [])
+            Button("") { withAnimation { showUI.toggle() } }.keyboardShortcut("h", modifiers: [])
+            Button("") { if isPro { if !showUI { showUI = true }; showInspector.toggle() } }.keyboardShortcut("i", modifiers: [])
+            ForEach(FractalModel.allCases) { m in
+                Button("") { renderer.model = m }.keyboardShortcut(KeyEquivalent(Character("\(m.rawValue + 1)")), modifiers: [])
+            }
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+    }
+
+    // MARK: Pomoc
+
+    private var helpCard: some View {
+        let rows: [(String, String)] = [
+            ("1 – 6", tr("wybór modelu", "choose model")), (tr("Spacja", "Space"), tr("film: automatyczny zoom", "movie: auto-zoom")),
+            ("R", tr("reset widoku", "reset view")), ("Q / E", tr("obrót widoku", "rotate view")),
+            ("D", tr("krajobraz 3D", "3D landscape")), ("M", tr("muzyka", "music")),
+            ("S", tr("niespodzianka (losowy styl)", "surprise me (random style)")), ("T", tr("wycieczka po miejscach", "tour through places")),
+            ("J", tr("Julia z punktu pod kursorem", "Julia from point under cursor")), ("I", tr("panel ustawień (Pro)", "settings panel (Pro)")),
+            ("H", tr("ukryj / pokaż interfejs", "hide / show interface")), ("?", tr("ta pomoc", "this help"))
+        ]
+        return VStack(alignment: .leading, spacing: 8) {
+            Label(tr("Skróty i sterowanie", "Shortcuts & controls"), systemImage: "keyboard").font(.headline)
+            ForEach(rows.indices, id: \.self) { i in
+                HStack(spacing: 12) {
+                    Text(rows[i].0).font(.system(.callout, design: .monospaced)).frame(width: 70, alignment: .leading)
+                    Text(rows[i].1).font(.callout).foregroundStyle(Color.white.opacity(0.66))
+                }
+            }
+            Divider()
+            Text(tr("Zoom: kółko / pinch · Przesuwanie: przeciąganie · Obrót: gest obrotu na gładziku · Dwuklik: ×2",
+                    "Zoom: wheel / pinch · Pan: drag · Rotate: trackpad rotate gesture · Double-click: ×2"))
+                .font(.caption).foregroundStyle(Color.white.opacity(0.66)).frame(width: 360, alignment: .leading)
+        }
+        .padding(22)
+        .glassCard()
+        .onTapGesture { withAnimation { showHelp = false } }
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
     // MARK: Pasek narzędzi
 
-    private var toolbar: some View {
+    private func toolbar(inlinePalettes: Bool) -> some View {
         HStack(spacing: 14) {
             Menu {
                 ForEach(FractalModel.allCases) { m in
-                    Button { renderer.model = m } label: {
-                        Label(m.title, systemImage: m.symbol)
-                    }
-                    .keyboardShortcut(KeyEquivalent(Character("\(m.rawValue + 1)")), modifiers: [])
+                    Button { renderer.model = m } label: { Label(m.title, systemImage: m.symbol) }
                 }
             } label: {
                 Label(renderer.model.title, systemImage: renderer.model.symbol)
-                    .frame(minWidth: 120, alignment: .leading)
+                    .frame(minWidth: 110, alignment: .leading)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
 
             Divider().frame(height: 22)
 
-            HStack(spacing: 5) {
-                ForEach(0..<Palettes.count, id: \.self) { i in
-                    PaletteChip(index: i, selected: renderer.paletteIndex == i)
-                        .frame(width: 26, height: 16)
-                        .onTapGesture { renderer.paletteIndex = i }
-                        .help(Palettes.all[i].name)
-                }
-            }
-
-            Divider().frame(height: 22)
-
-            HStack(spacing: 8) {
-                Image(systemName: "dial.low").foregroundStyle(.secondary)
-                Slider(value: $renderer.baseIterations, in: 50...3000).frame(width: 110)
-                Text("\(Int(renderer.baseIterations))")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 34, alignment: .trailing)
-            }
-            .help(tr("Bazowa liczba iteracji (rośnie automatycznie z powiększeniem)", "Base iteration count (grows automatically with zoom)"))
-
-            Divider().frame(height: 22)
-
-            Button { renderer.autoZoom.toggle() } label: {
-                Image(systemName: renderer.autoZoom ? "pause.fill" : "play.fill")
-            }
-            .keyboardShortcut(.space, modifiers: [])
-            .help(tr("Film: automatyczne powiększanie do środka widoku (spacja)", "Movie: automatic zoom into the view center (space)"))
-
-            Button { renderer.resetView() } label: { Image(systemName: "arrow.counterclockwise") }
-                .keyboardShortcut("r", modifiers: [])
-                .help(tr("Resetuj widok (R)", "Reset view (R)"))
-
-            Button { renderer.saveFavorite() } label: { Image(systemName: "star") }
-                .help(tr("Dodaj bieżący widok do ulubionych", "Add current view to favorites"))
-
             Menu {
-                ForEach(ExportSize.allCases) { s in
-                    Button(s.title) { renderer.saveSnapshot(s) }
+                ForEach(Look.all) { look in
+                    Button(look.name) { look.apply(renderer) }
                 }
+            } label: {
+                Label(tr("Style", "Looks"), systemImage: "wand.and.stars")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help(tr("Gotowe style: paleta + efekty jednym kliknięciem", "Ready-made looks: palette + effects in one click"))
+
+            Divider().frame(height: 22)
+
+            if inlinePalettes {
+                HStack(spacing: 5) {
+                    ForEach(0..<Palettes.count, id: \.self) { i in
+                        PaletteChip(index: i, selected: renderer.paletteIndex == i)
+                            .frame(width: 26, height: 16)
+                            .onTapGesture { renderer.paletteIndex = i }
+                            .help(Palettes.all[i].name)
+                    }
+                }
+            } else {
+                Menu {
+                    ForEach(0..<Palettes.count, id: \.self) { i in
+                        Button(Palettes.all[i].name) { renderer.paletteIndex = i }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        PaletteChip(index: renderer.paletteIndex, selected: false).frame(width: 34, height: 16)
+                        Text(Palettes.all[renderer.paletteIndex].name)
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+
+            Divider().frame(height: 22)
+
+            toolButton(renderer.autoZoom ? "pause.fill" : "play.fill", tr("Film: automatyczny zoom (spacja)", "Movie: auto-zoom (space)"), active: renderer.autoZoom) {
+                renderer.autoZoom.toggle()
+            }
+            toolButton("cube", tr("Krajobraz 3D (D)", "3D landscape (D)"), active: renderer.mode3D) { renderer.mode3D.toggle() }
+            toolButton(renderer.musicOn ? "speaker.wave.2.fill" : "speaker.slash", tr("Muzyka ambient (M)", "Ambient music (M)"), active: renderer.musicOn) {
+                renderer.musicOn.toggle()
+            }
+            toolButton("dice", tr("Niespodzianka (S)", "Surprise me (S)")) { renderer.surprise() }
+
+            Divider().frame(height: 22)
+
+            toolButton("arrow.counterclockwise", tr("Resetuj widok (R)", "Reset view (R)")) { renderer.resetView() }
+            toolButton("star", tr("Dodaj bieżący widok do ulubionych", "Add current view to favorites")) { renderer.saveFavorite() }
+            Menu {
+                ForEach(ExportSize.allCases) { s in Button(s.title) { renderer.saveSnapshot(s) } }
+                Divider()
+                Button(tr("Kopiuj obraz do schowka", "Copy image to clipboard")) { renderer.copyImageToPasteboard() }
             } label: {
                 Image(systemName: "square.and.arrow.down")
             }
@@ -209,6 +317,44 @@ struct ContentView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 11)
         .glassCapsule()
+    }
+
+    private func toolButton(_ symbol: String, _ help: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .foregroundStyle(active ? Color.accentColor : Color.primary)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+/// Przełącznik trybu Easy / Pro.
+private struct ModeSwitch: View {
+    @Binding var isPro: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            segment("Easy", !isPro) { isPro = false }
+            segment("Pro", isPro) { isPro = true }
+        }
+        .padding(2)
+        .background(Color.white.opacity(0.10), in: Capsule())
+        .help(tr("Easy: prosty interfejs · Pro: pełny panel ustawień", "Easy: simple interface · Pro: full settings panel"))
+    }
+
+    private func segment(_ title: String, _ on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 11).padding(.vertical, 4)
+                .foregroundStyle(on ? Color.black : Color.white.opacity(0.66))
+                .background(on ? Color.white.opacity(0.92) : .clear, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -234,7 +380,7 @@ private struct Inspector: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
-                        .foregroundStyle(tab == i ? Color.primary : Color.secondary)
+                        .foregroundStyle(tab == i ? Color.primary : Color.white.opacity(0.66))
                         .background(tab == i ? Color.white.opacity(0.16) : .clear,
                                     in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .contentShape(Rectangle())
@@ -267,6 +413,7 @@ private struct Inspector: View {
     // MARK: Model
     private var modelSection: some View {
         Card(title: "Model", symbol: "square.stack.3d.up") {
+            SliderRow(tr("Iteracje", "Iterations"), value: $renderer.baseIterations, range: 50...3000, format: "%.0f")
             Picker("Model", selection: $renderer.model) {
                 ForEach(FractalModel.allCases) { m in Text(m.title).tag(m) }
             }
@@ -286,14 +433,13 @@ private struct Inspector: View {
                     Label(tr("Julia z punktu pod kursorem", "Julia from point under cursor"), systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
-                .keyboardShortcut("j", modifiers: [])
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help(tr("Przesuń kursor nad wybrany punkt i naciśnij J", "Move the cursor over a point and press J"))
             }
             if renderer.model != .mandelbrot {
                 Text(tr("Zoom do ok. 4·10⁴× (precyzja float). Głęboki zoom: Mandelbrot.", "Zoom up to ~4·10⁴× (float precision). Deep zoom: Mandelbrot only."))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Color.white.opacity(0.66))
             }
         }
     }
@@ -305,7 +451,7 @@ private struct Inspector: View {
                 ForEach(0..<Palettes.count, id: \.self) { i in
                     VStack(spacing: 2) {
                         PaletteChip(index: i, selected: renderer.paletteIndex == i).frame(height: 24)
-                        Text(Palettes.all[i].name).font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text(Palettes.all[i].name).font(.system(size: 9)).foregroundStyle(Color.white.opacity(0.66))
                     }
                     .onTapGesture { renderer.paletteIndex = i }
                 }
@@ -322,13 +468,17 @@ private struct Inspector: View {
             if renderer.cycleColors {
                 SliderRow(tr("Prędkość", "Speed"), value: $renderer.cycleSpeed, range: 0.02...0.6, format: "%.2f")
             }
-            Text(tr("Własna paleta", "Custom palette")).font(.caption).foregroundStyle(.secondary)
+            Text(tr("Własna paleta", "Custom palette")).font(.caption).foregroundStyle(Color.white.opacity(0.66))
             HStack(spacing: 4) {
                 ForEach(renderer.customColors.indices, id: \.self) { i in
                     ColorPicker("", selection: $renderer.customColors[i], supportsOpacity: false)
                         .labelsHidden()
                 }
             }
+            Button { renderer.randomPalette() } label: {
+                Label(tr("Losuj własną paletę", "Randomize custom palette"), systemImage: "dice").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered).controlSize(.small)
         }
     }
 
@@ -360,7 +510,7 @@ private struct Inspector: View {
                     SliderRow(tr("Prędkość", "Speed"), value: $renderer.rotateSpeed, range: -40...40, format: "%.0f°/s")
                 }
                 Text(tr("Gest obrotu na gładziku, klawisze Q / E.", "Trackpad rotate gesture, keys Q / E."))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(Color.white.opacity(0.66))
             }
             Card(title: "3D", symbol: "cube") {
                 Toggle(tr("Krajobraz 3D (D)", "3D landscape (D)"), isOn: $renderer.mode3D).font(.callout)
@@ -368,7 +518,7 @@ private struct Inspector: View {
                     SliderRow(tr("Nachylenie", "Tilt"), value: $renderer.pitchDeg, range: 0...85, format: "%.0f°")
                     SliderRow(tr("Wysokość", "Height"), value: $renderer.heightScale, range: 0...1.5, format: "%.2f")
                     Text(tr("W trybie 3D zoom celuje w środek widoku.", "In 3D mode, zoom targets the view center."))
-                        .font(.caption2).foregroundStyle(.secondary)
+                        .font(.caption2).foregroundStyle(Color.white.opacity(0.66))
                 }
             }
             Card(title: tr("Muzyka", "Music"), symbol: "music.note") {
@@ -376,7 +526,7 @@ private struct Inspector: View {
                 if renderer.musicOn {
                     SliderRow(tr("Głośność", "Volume"), value: $renderer.musicVolume, range: 0...1, format: "%.2f")
                     Text(tr("Im głębszy zoom, tym jaśniejsze brzmienie.", "The deeper the zoom, the brighter the sound."))
-                        .font(.caption2).foregroundStyle(.secondary)
+                        .font(.caption2).foregroundStyle(Color.white.opacity(0.66))
                 }
             }
         }
@@ -400,6 +550,18 @@ private struct Inspector: View {
                 Label(tr("Zapisz bieżący widok", "Save current view"), systemImage: "plus").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered).controlSize(.small)
+            Divider()
+            Toggle(tr("Wycieczka po miejscach (T)", "Tour through places (T)"),
+                   isOn: Binding(get: { renderer.tourOn }, set: { renderer.setTour($0) })).font(.callout)
+            HStack(spacing: 6) {
+                Button { renderer.copyCoordinatesToPasteboard() } label: {
+                    Label(tr("Kopiuj współrzędne", "Copy coordinates"), systemImage: "doc.on.doc").frame(maxWidth: .infinity)
+                }
+                Button { renderer.copyImageToPasteboard() } label: {
+                    Label(tr("Kopiuj obraz", "Copy image"), systemImage: "photo.on.rectangle").frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.bordered).controlSize(.small)
         }
     }
 
@@ -421,7 +583,7 @@ private struct Card<Content: View>: View {
             Label(title, systemImage: symbol)
                 .font(.system(size: 11, weight: .semibold))
                 .textCase(.uppercase)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.white.opacity(0.66))
             content
         }
         .padding(13)
@@ -446,7 +608,7 @@ private struct SliderRow: View {
             Slider(value: $value, in: range)
             Text(String(format: format, value))
                 .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.white.opacity(0.66))
                 .frame(width: 44, alignment: .trailing)
         }
     }
@@ -485,7 +647,7 @@ private struct PlaceRow: View {
             .buttonStyle(.plain)
             if let onDelete {
                 Button(action: onDelete) { Image(systemName: "trash").font(.caption) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .buttonStyle(.plain).foregroundStyle(Color.white.opacity(0.66))
             }
         }
         .padding(.vertical, 3).padding(.horizontal, 6)
@@ -521,6 +683,7 @@ extension View {
     func glassCapsule() -> some View {
         self
             .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().fill(Color.black.opacity(0.24)))
             .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.8))
             .shadow(color: .black.opacity(0.28), radius: 18, y: 6)
     }
@@ -528,6 +691,7 @@ extension View {
     func glassCard() -> some View {
         self
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.24)))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(.white.opacity(0.22), lineWidth: 0.8))
             .shadow(color: .black.opacity(0.28), radius: 18, y: 6)

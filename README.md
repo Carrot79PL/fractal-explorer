@@ -1,8 +1,10 @@
-<p align="center"><img src="docs/icon.png" width="128" alt="Mandelbrot Metal"></p>
+<p align="center"><img src="docs/icon.png" width="128" alt="Fractal Explorer"></p>
 
-# Mandelbrot Metal
+# Fractal Explorer
 
 🇵🇱 [Polski](#polski) · 🇬🇧 [English](#english)
+
+![Fractal Explorer – Pro mode](docs/ui-pro.jpg)
 
 ![Seahorse Valley](docs/seahorse.jpg)
 
@@ -16,6 +18,9 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 
 ### Możliwości
 
+- **Tryby Easy / Pro:** Easy to czysty, prosty interfejs; Pro odsłania pełny panel ustawień, współrzędne i iteracje.
+- **Ekran startowy** w stylu Photoshopa z fraktalem, nazwą i autorem.
+- **Style** (gotowe zestawy palety i efektów), **niespodzianka** (losowe miejsce + styl), **losowa paleta**, **wycieczka** po miejscach, kopiowanie współrzędnych i obrazu do schowka.
 - **6 modeli:** Mandelbrot, Płonący statek, Tricorn, Multibrot (potęga 2–8), zbiory Julii (z wyborem punktu pod kursorem), Newton z³−1.
 - **Głęboki zoom Mandelbrota (do ok. 10²⁵×)** dzięki teorii perturbacji: orbita referencyjna liczona na CPU w double-double, różnice liczone na GPU z rebasingiem.
 - **Płynne kolory bez pasm** (gładka liczba iteracji, dithering), 9 palet (w tym własna), 3 tryby koloru (iteracje / kąt / pułapka orbity), płynne przejścia między paletami, cykl kolorów.
@@ -28,7 +33,7 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 - **Krajobraz 3D:** fraktal jako oświetlony teren sięgający horyzontu (lustrzane kafelki, mgła, niebo), regulowane nachylenie i wysokość; działa z obrotem i zoomem.
 - **Muzyka ambient:** generowana na żywo (akordy, dzwonki, pogłos); im głębszy zoom, tym jaśniejsze brzmienie.
 - **Więcej efektów:** kalejdoskop, kolorowe wnętrze zbioru, nasycenie, kontrast, odwrócenie kolorów.
-- **Dwujęzyczny interfejs PL/EN** (przycisk w prawym górnym rogu).
+- **Dwujęzyczny interfejs PL/EN** (przycisk w prawym górnym rogu; domyślnie język systemu).
 
 ### Skróty klawiszowe
 
@@ -41,6 +46,9 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 | `H` | ukryj / pokaż interfejs |
 | `Q` / `E` | obrót widoku |
 | `D` | krajobraz 3D |
+| `S` | niespodzianka (losowy styl) |
+| `T` | wycieczka po miejscach |
+| `?` | pomoc ze skrótami |
 | `M` | muzyka |
 | `J` | zbiór Julii z punktu pod kursorem |
 
@@ -49,10 +57,10 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 Wymagania: macOS 14+, Xcode Command Line Tools oraz komponent Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`). Pełny Xcode nie jest potrzebny.
 
 ```bash
-git clone https://github.com/Carrot79PL/mandelbrot-metal.git
-cd mandelbrot-metal
+git clone https://github.com/Carrot79PL/fractal-explorer.git
+cd fractal-explorer
 ./build.sh
-open Mandelbrot.app
+open "Fractal Explorer.app"
 ```
 
 Ikonę można wygenerować ponownie skryptem `make_icon.py` (wymaga Pythona z `numpy` i `Pillow`).
@@ -75,6 +83,9 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 
 ### Features
 
+- **Easy / Pro modes:** Easy is a clean, simple interface; Pro reveals the full settings panel, coordinates and iterations.
+- **Photoshop-style splash screen** with a fractal, the name and the author.
+- **Looks** (ready-made palette + effect sets), **surprise me** (random place + look), **random palette**, a **tour** through places, copy coordinates / image to the clipboard.
 - **6 models:** Mandelbrot, Burning Ship, Tricorn, Multibrot (power 2–8), Julia sets (pick the parameter from the point under the cursor), Newton z³−1.
 - **Deep Mandelbrot zoom (up to ~10²⁵×)** using perturbation theory: a reference orbit computed on the CPU in double-double, deltas computed on the GPU with rebasing.
 - **Smooth, band-free coloring** (smooth iteration count, dithering), 9 palettes (including a custom one), 3 color modes (iterations / angle / orbit trap), smooth palette cross-fades, color cycling.
@@ -87,7 +98,7 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 - **3D landscape:** the fractal as a lit terrain stretching to the horizon (mirrored tiles, haze, sky), with adjustable tilt and height; works with rotation and zoom.
 - **Ambient music:** generated live (chords, bells, reverb); the deeper the zoom, the brighter the sound.
 - **More effects:** kaleidoscope, colored set interior, saturation, contrast, color inversion.
-- **Bilingual UI, PL/EN** (button in the top-right corner).
+- **Bilingual UI, PL/EN** (button in the top-right corner; defaults to the system language).
 
 ### Keyboard shortcuts
 
@@ -100,6 +111,9 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 | `H` | hide / show interface |
 | `Q` / `E` | rotate view |
 | `D` | 3D landscape |
+| `S` | surprise me (random look) |
+| `T` | tour through places |
+| `?` | shortcut help |
 | `M` | music |
 | `J` | Julia set from the point under the cursor |
 
@@ -108,10 +122,10 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 Requirements: macOS 14+, Xcode Command Line Tools and the Metal Toolchain component (`xcodebuild -downloadComponent MetalToolchain`). Full Xcode is not required.
 
 ```bash
-git clone https://github.com/Carrot79PL/mandelbrot-metal.git
-cd mandelbrot-metal
+git clone https://github.com/Carrot79PL/fractal-explorer.git
+cd fractal-explorer
 ./build.sh
-open Mandelbrot.app
+open "Fractal Explorer.app"
 ```
 
 The icon can be regenerated with `make_icon.py` (needs Python with `numpy` and `Pillow`).

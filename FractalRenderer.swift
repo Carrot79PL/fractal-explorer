@@ -140,6 +140,9 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
     }
     @Published var musicVolume = 0.5 { didSet { music?.setVolume(musicVolume) } }
     private var music: AmbientMusic?
+    @Published var tourOn = false
+    var tourTimer: Timer?
+    var tourIndex = -1
     private var syncing = false
     private var angleRad = 0.0
     @Published var favorites: [SavedView] = []
@@ -190,6 +193,13 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         anchorVec = .zero
         angleRad = a
         wake()
+    }
+
+    func coordinatesString() -> String {
+        let c = center
+        let digits = min(17, max(7, Int(ceil(-log10(scale))) + 4))
+        return String(format: "Re %+.*f, Im %+.*f, zoom %.3e, model %@",
+                      digits, c.x.hi, digits, c.y.hi, model.homeScale / scale, model.title)
     }
 
     func rotateBy(degrees: Double) {
