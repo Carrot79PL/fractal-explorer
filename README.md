@@ -18,7 +18,7 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 
 ### Możliwości
 
-- **Tryby Easy / Pro:** Easy to czysty, prosty interfejs; Pro odsłania pełny panel ustawień, współrzędne i iteracje.
+- **Tryby Easy / Pro:** Easy to czysty, prosty interfejs; Pro odsłania w dolnym menu wszystkie opcje (model, kolor, efekty, obrót/3D/muzyka, miejsca), współrzędne i iteracje.
 - **Ekran startowy** w stylu Photoshopa z fraktalem, nazwą i autorem.
 - **Style** (gotowe zestawy palety i efektów), **niespodzianka** (losowe miejsce + styl), **losowa paleta**, **wycieczka** po miejscach, kopiowanie współrzędnych i obrazu do schowka.
 - **6 modeli:** Mandelbrot, Płonący statek, Tricorn, Multibrot (potęga 2–8), zbiory Julii (z wyborem punktu pod kursorem), Newton z³−1.
@@ -83,7 +83,7 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 
 ### Features
 
-- **Easy / Pro modes:** Easy is a clean, simple interface; Pro reveals the full settings panel, coordinates and iterations.
+- **Easy / Pro modes:** Easy is a clean, simple interface; Pro reveals all options in the bottom menu (model, color, effects, rotation/3D/music, places), coordinates and iterations.
 - **Photoshop-style splash screen** with a fractal, the name and the author.
 - **Looks** (ready-made palette + effect sets), **surprise me** (random place + look), **random palette**, a **tour** through places, copy coordinates / image to the clipboard.
 - **6 models:** Mandelbrot, Burning Ship, Tricorn, Multibrot (power 2–8), Julia sets (pick the parameter from the point under the cursor), Newton z³−1.

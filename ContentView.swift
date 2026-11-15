@@ -5,7 +5,7 @@ struct ContentView: View {
     @AppStorage("lang") private var lang = Lang.current
     @AppStorage("uiMode") private var uiMode = "easy"
     @State private var showUI = true
-    @State private var showInspector = true
+    @State private var panel: PanelKind? = nil
     @State private var showHelp = false
     @State private var showHint = true
 
@@ -26,12 +26,8 @@ struct ContentView: View {
                     Spacer()
                     Color.clear.frame(width: 300, height: 44)
                 }
-                HStack(alignment: .top) {
-                    Spacer()
-                    if isPro && showInspector { Inspector(renderer: renderer) }
-                }
-                .frame(maxHeight: .infinity, alignment: .top)
-                if !isPro && showHint { hint }
+                Spacer(minLength: 0)
+                if !isPro && showHint && panel == nil { hint }
                 ViewThatFits(in: .horizontal) {
                     toolbar(inlinePalettes: true)
                     toolbar(inlinePalettes: false)
@@ -41,8 +37,22 @@ struct ContentView: View {
             .opacity(showUI ? 1 : 0)
             .allowsHitTesting(showUI)
             .animation(.smooth(duration: 0.3), value: showUI)
-            .animation(.smooth(duration: 0.3), value: showInspector)
+            .animation(.smooth(duration: 0.25), value: panel)
             .animation(.smooth(duration: 0.3), value: uiMode)
+
+            // Karta opcji nad dolnym paskiem – całą wysokość okna może zająć, więc nic nie wychodzi za ramkę.
+            if let p = panel {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    OptionsPanel(renderer: renderer, kind: p) { withAnimation(.smooth(duration: 0.25)) { panel = nil } }
+                        .id(p)
+                }
+                .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 92)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(showUI ? 1 : 0)
+                .allowsHitTesting(showUI)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
 
             shortcuts
             cornerButtons
@@ -61,7 +71,9 @@ struct ContentView: View {
         .background(Color.black)
         .preferredColorScheme(.dark)
         .background(WindowAccessor { SplashController.shared.start(main: $0) })
+        .onChange(of: uiMode) { _, _ in if !isPro && panel != .places { panel = nil } }
         .onAppear {
+            if let p = ProcessInfo.processInfo.environment["FRACTAL_PANEL"].flatMap({ Int($0) }).flatMap(PanelKind.init(rawValue:)) { panel = p }
             DispatchQueue.main.asyncAfter(deadline: .now() + 14) { withAnimation { showHint = false } }
         }
     }
@@ -157,13 +169,6 @@ struct ContentView: View {
                         withAnimation { showHelp.toggle() }
                     }
                     .opacity(showUI ? 1 : 0).allowsHitTesting(showUI)
-                    if isPro {
-                        RoundButton(symbol: "sidebar.right", help: tr("Panel ustawień (I)", "Settings panel (I)"), active: showInspector) {
-                            if !showUI { showUI = true }
-                            showInspector.toggle()
-                        }
-                        .opacity(showUI ? 1 : 0).allowsHitTesting(showUI)
-                    }
                     RoundButton(symbol: showUI ? "eye.slash" : "eye",
                                 help: showUI ? tr("Ukryj interfejs (H)", "Hide interface (H)") : tr("Pokaż interfejs (H)", "Show interface (H)")) {
                         showUI.toggle()
@@ -192,7 +197,7 @@ struct ContentView: View {
             Button("") { renderer.juliaFromCursor() }.keyboardShortcut("j", modifiers: [])
             Button("") { withAnimation { showHelp.toggle() } }.keyboardShortcut("/", modifiers: [])
             Button("") { withAnimation { showUI.toggle() } }.keyboardShortcut("h", modifiers: [])
-            Button("") { if isPro { if !showUI { showUI = true }; showInspector.toggle() } }.keyboardShortcut("i", modifiers: [])
+            Button("") { withAnimation(.smooth(duration: 0.25)) { panel = nil } }.keyboardShortcut("i", modifiers: [])
             ForEach(FractalModel.allCases) { m in
                 Button("") { renderer.model = m }.keyboardShortcut(KeyEquivalent(Character("\(m.rawValue + 1)")), modifiers: [])
             }
@@ -209,7 +214,7 @@ struct ContentView: View {
             ("R", tr("reset widoku", "reset view")), ("Q / E", tr("obrót widoku", "rotate view")),
             ("D", tr("krajobraz 3D", "3D landscape")), ("M", tr("muzyka", "music")),
             ("S", tr("niespodzianka (losowy styl)", "surprise me (random style)")), ("T", tr("wycieczka po miejscach", "tour through places")),
-            ("J", tr("Julia z punktu pod kursorem", "Julia from point under cursor")), ("I", tr("panel ustawień (Pro)", "settings panel (Pro)")),
+            ("J", tr("Julia z punktu pod kursorem", "Julia from point under cursor")), ("I", tr("zamknij panel opcji", "close options panel")),
             ("H", tr("ukryj / pokaż interfejs", "hide / show interface")), ("?", tr("ta pomoc", "this help"))
         ]
         return VStack(alignment: .leading, spacing: 8) {
@@ -287,6 +292,14 @@ struct ContentView: View {
 
             Divider().frame(height: 22)
 
+            ForEach(PanelKind.allCases.filter { isPro || $0 == .places }) { k in
+                toolButton(k.symbol, k.title, active: panel == k) {
+                    withAnimation(.smooth(duration: 0.25)) { panel = (panel == k ? nil : k) }
+                }
+            }
+
+            Divider().frame(height: 22)
+
             toolButton(renderer.autoZoom ? "pause.fill" : "play.fill", tr("Film: automatyczny zoom (spacja)", "Movie: auto-zoom (space)"), active: renderer.autoZoom) {
                 renderer.autoZoom.toggle()
             }
@@ -360,53 +373,65 @@ private struct ModeSwitch: View {
 
 // MARK: - Panel boczny
 
-private struct Inspector: View {
+enum PanelKind: Int, CaseIterable, Identifiable {
+    case model, color, effects, view, places
+    var id: Int { rawValue }
+    var symbol: String {
+        switch self {
+        case .model: return "slider.horizontal.3"
+        case .color: return "paintpalette"
+        case .effects: return "sparkles"
+        case .view: return "rotate.3d"
+        case .places: return "mappin.and.ellipse"
+        }
+    }
+    var title: String {
+        switch self {
+        case .model: return tr("Model i iteracje", "Model & iterations")
+        case .color: return tr("Kolor", "Color")
+        case .effects: return tr("Efekty", "Effects")
+        case .view: return tr("Obrót, 3D i muzyka", "Rotation, 3D & music")
+        case .places: return tr("Miejsca", "Places")
+        }
+    }
+}
+
+/// Karta z opcjami wysuwana nad dolnym paskiem (zastępuje dawny panel boczny).
+private struct OptionsPanel: View {
     @AppStorage("lang") private var lang = Lang.current
     @ObservedObject var renderer: FractalRenderer
-
-    @State private var tab = 0
-    private var tabs: [(String, String)] = [("Model", "square.stack.3d.up"), (tr("Kolor", "Color"), "paintpalette"),
-                                            (tr("Efekty", "Effects"), "wand.and.stars"),
-                                            (tr("Widok", "View"), "rotate.3d"), (tr("Miejsca", "Places"), "star")]
+    let kind: PanelKind
+    let onClose: () -> Void
 
     var body: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 4) {
-                ForEach(tabs.indices, id: \.self) { i in
-                    Button { tab = i } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: tabs[i].1).font(.system(size: 14))
-                            Text(tabs[i].0).font(.system(size: 10, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .foregroundStyle(tab == i ? Color.primary : Color.white.opacity(0.66))
-                        .background(tab == i ? Color.white.opacity(0.16) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .contentShape(Rectangle())
-                    }
+            HStack(spacing: 8) {
+                Image(systemName: kind.symbol)
+                Text(kind.title).font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Button(action: onClose) { Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).padding(4).contentShape(Rectangle()) }
                     .buttonStyle(.plain)
-                }
+                    .foregroundStyle(Color.white.opacity(0.7))
             }
-            .padding(4)
-            .glassCard()
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .glassCapsule()
 
-            // Zawartość zakładki mieści się bez przewijania; przewijanie tylko awaryjnie (np. bardzo dużo ulubionych).
+            // Mieści się bez przewijania; przewijanie tylko awaryjnie (np. bardzo dużo ulubionych).
             ViewThatFits(in: .vertical) {
                 current
-                ScrollView(showsIndicators: false) { current }
+                ScrollView(showsIndicators: false) { current.padding(.bottom, 4) }
             }
         }
-        .frame(width: 292)
+        .frame(width: 340)
     }
 
     @ViewBuilder private var current: some View {
-        switch tab {
-        case 0: modelSection
-        case 1: colorSection
-        case 2: effectsSection
-        case 3: viewSection
-        default: viewsSection
+        switch kind {
+        case .model: modelSection
+        case .color: colorSection
+        case .effects: effectsSection
+        case .view: viewSection
+        case .places: viewsSection
         }
     }
 
@@ -469,7 +494,7 @@ private struct Inspector: View {
                 SliderRow(tr("Prędkość", "Speed"), value: $renderer.cycleSpeed, range: 0.02...0.6, format: "%.2f")
             }
             Text(tr("Własna paleta", "Custom palette")).font(.caption).foregroundStyle(Color.white.opacity(0.66))
-            HStack(spacing: 4) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 6) {
                 ForEach(renderer.customColors.indices, id: \.self) { i in
                     ColorPicker("", selection: $renderer.customColors[i], supportsOpacity: false)
                         .labelsHidden()
