@@ -1,3 +1,5 @@
+> ⬇️ **[Pobierz / Download Fractal Explorer (DMG)](https://github.com/Carrot79PL/fractal-explorer/releases/latest)** · macOS 14+, Apple Silicon · darmowa / free · pierwsze uruchomienie: prawy przycisk → Otwórz
+
 <p align="center"><img src="docs/icon.png" width="128" alt="Fractal Explorer"></p>
 
 # Fractal Explorer
