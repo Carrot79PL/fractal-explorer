@@ -48,6 +48,8 @@ struct SplashView: View {
         .frame(width: 720, height: 440)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.15), lineWidth: 0.8))
+        .shadow(color: .black.opacity(0.5), radius: 22, y: 8)   // cień rysowany przez SwiftUI (cień okna migał przy odświeżaniu)
+        .padding(40)
     }
 }
 
@@ -73,11 +75,12 @@ final class SplashController {
         if env["FRACTAL_NOSPLASH"] != nil || env["MANDELBROT_ZOOMTEST"] != nil || env["MANDELBROT_DEBUG"] != nil { return }
 
         main.alphaValue = 0
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 440),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 520),
                          styleMask: [.borderless], backing: .buffered, defer: false)
         w.isOpaque = false
         w.backgroundColor = .clear
-        w.hasShadow = true
+        w.hasShadow = false
+        w.ignoresMouseEvents = true
         w.level = .floating
         w.contentView = NSHostingView(rootView: SplashView(model: model))
         w.center()
@@ -126,7 +129,7 @@ struct WindowAccessor: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard window != nil else { return }
-            DispatchQueue.main.async { [weak self] in self?.onWindow?(self?.window) }
+            onWindow?(window)   // synchronicznie: okno głównego widoku chowamy zanim zdąży mignąć
         }
     }
 }

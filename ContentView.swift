@@ -683,7 +683,7 @@ extension View {
     func glassCapsule() -> some View {
         self
             .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().fill(Color.black.opacity(0.24)))
+            .overlay(Capsule().fill(Color.black.opacity(0.24)).allowsHitTesting(false))
             .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.8))
             .shadow(color: .black.opacity(0.28), radius: 18, y: 6)
     }
@@ -691,7 +691,7 @@ extension View {
     func glassCard() -> some View {
         self
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.24)))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.24)).allowsHitTesting(false))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(.white.opacity(0.22), lineWidth: 0.8))
             .shadow(color: .black.opacity(0.28), radius: 18, y: 6)
