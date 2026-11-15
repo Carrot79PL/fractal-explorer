@@ -355,7 +355,43 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         return SavedView(name: name, model: model.rawValue,
                          reHi: c.x.hi, reLo: c.x.lo, imHi: c.y.hi, imLo: c.y.lo,
                          scale: scale, palette: paletteIndex,
-                         juliaRe: juliaRe, juliaIm: juliaIm, power: power)
+                         juliaRe: juliaRe, juliaIm: juliaIm, power: power,
+                         look: captureLook())
+    }
+
+    func captureLook() -> LookSettings {
+        LookSettings(angle: angleRad, colorMode: colorMode, density: density, shade: shade, glow: glow,
+                     saturation: saturation, contrast: contrast, invert: invert, kaleido: kaleido,
+                     interior: interiorColor, mode3D: mode3D, pitch: pitchDeg, height: heightScale,
+                     autoRotate: autoRotate, rotateSpeed: rotateSpeed, antialias: antialias,
+                     cycleColors: cycleColors, cycleSpeed: cycleSpeed, baseIterations: baseIterations,
+                     phase: phase,
+                     customColors: customColors.map {
+                         let c = NSColor($0).usingColorSpace(.sRGB) ?? .black
+                         return [Float(c.redComponent), Float(c.greenComponent), Float(c.blueComponent)]
+                     })
+    }
+
+    private func applyLook(_ l: LookSettings) {
+        // Najpierw własna paleta (jej zmiana wymusza wybór palety), potem reszta, na końcu indeks palety (w go(to:)).
+        if l.customColors.count == 6 {
+            let cols = l.customColors.map { Color(red: Double($0[0]), green: Double($0[1]), blue: Double($0[2])) }
+            if cols != customColors { customColors = cols }
+        }
+        colorMode = l.colorMode; density = l.density; shade = l.shade; glow = l.glow
+        saturation = l.saturation; contrast = l.contrast; invert = l.invert
+        kaleido = l.kaleido; interiorColor = l.interior
+        pitchDeg = l.pitch; heightScale = l.height; mode3D = l.mode3D
+        rotateSpeed = l.rotateSpeed; autoRotate = l.autoRotate
+        antialias = l.antialias; cycleSpeed = l.cycleSpeed; cycleColors = l.cycleColors
+        baseIterations = l.baseIterations
+        phase = l.phase
+        angleRad = l.angle
+        syncing = true
+        var deg = (l.angle * 180 / .pi).truncatingRemainder(dividingBy: 360)
+        if deg > 180 { deg -= 360 } else if deg < -180 { deg += 360 }
+        angleDeg = deg
+        syncing = false
     }
 
     func go(to v: SavedView) {
@@ -364,6 +400,7 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
         model = FractalModel(rawValue: v.model) ?? .mandelbrot
         suppressHome = false
         power = v.power; juliaRe = v.juliaRe; juliaIm = v.juliaIm
+        if let l = v.look { applyLook(l) }
         paletteIndex = v.palette
         anchor = DD2(x: DD(hi: v.reHi, lo: v.reLo), y: DD(hi: v.imHi, lo: v.imLo))
         anchorVec = .zero
@@ -947,6 +984,24 @@ final class FractalRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     default: break
                     }
                 }
+            }
+            if env["MANDELBROT_ROUNDTRIP"] != nil {
+                setAngle(33 * .pi / 180); kaleido = 5; shade = 0.7; saturation = 1.3; density = 2.2
+                interiorColor = true; invert = true; pitchDeg = 71; heightScale = 0.8; baseIterations = 777
+                randomPalette(); paletteIndex = 4
+                let saved = currentView(name: "test")
+                let data = try! JSONEncoder().encode(saved)
+                let loaded = try! JSONDecoder().decode(SavedView.self, from: data)
+                resetLook(); randomPalette(); setAngle(0); baseIterations = 100; paletteIndex = 1
+                model = .julia
+                go(to: loaded)
+                let again = currentView(name: "test")
+                var a = again.look!, b = saved.look!
+                a.customColors = a.customColors.map { $0.map { ($0 * 1000).rounded() } }
+                b.customColors = b.customColors.map { $0.map { ($0 * 1000).rounded() } }
+                let ok = a == b && again.model == saved.model && again.palette == saved.palette && again.scale == saved.scale && again.reHi == saved.reHi
+                FileHandle.standardError.write(Data("ROUNDTRIP \(ok ? "OK" : "FAIL")\n".utf8))
+                if !ok { FileHandle.standardError.write(Data("\(a)\n\(b)\n".utf8)) }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 guard let self = self else { return }

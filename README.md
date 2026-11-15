@@ -27,7 +27,7 @@ Natywna aplikacja na macOS do eksploracji fraktali w czasie rzeczywistym, napisa
 - **Efekty:** relief 3D, poświata, antyaliasing 2×2 w spoczynku, winieta.
 - **Sterowanie:** zoom w punkt pod kursorem (kółko / gest pinch), przesuwanie przeciągnięciem z tłumieniem, podwójne kliknięcie = zoom ×2, film z automatycznym zoomem.
 - **Adaptacyjna rozdzielczość** w ruchu, by utrzymać płynność; pełna jakość po zatrzymaniu.
-- **Miejsca:** 8 gotowych widoków + własne ulubione (zapamiętywane).
+- **Miejsca:** 8 gotowych widoków + własne ulubione z nazwami (zapamiętują pozycję i WSZYSTKIE ustawienia wyglądu).
 - **Eksport PNG** w 4K i 8K.
 - **Obrót widoku** (gest obrotu na gładziku, klawisze `Q`/`E`, suwak, automatyczny obrót).
 - **Krajobraz 3D:** fraktal jako oświetlony teren sięgający horyzontu (lustrzane kafelki, mgła, niebo), regulowane nachylenie i wysokość; działa z obrotem i zoomem.
@@ -92,7 +92,7 @@ A native macOS app for real-time fractal exploration, written in **Swift + Swift
 - **Effects:** 3D relief, glow, 2×2 antialiasing at rest, vignette.
 - **Controls:** zoom at the cursor (wheel / pinch), damped drag-to-pan, double-click to zoom ×2, auto-zoom “movie” mode.
 - **Adaptive resolution** while moving to stay smooth; full quality once you stop.
-- **Places:** 8 built-in views plus your own persistent favorites.
+- **Places:** 8 built-in views plus your own named favorites (they store the position and ALL look settings).
 - **PNG export** in 4K and 8K.
 - **View rotation** (trackpad rotate gesture, `Q`/`E` keys, slider, auto-rotate).
 - **3D landscape:** the fractal as a lit terrain stretching to the horizon (mirrored tiles, haze, sky), with adjustable tilt and height; works with rotation and zoom.

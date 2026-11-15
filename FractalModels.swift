@@ -108,6 +108,31 @@ enum Palettes {
 
 // MARK: - Zapisane widoki
 
+/// Wszystkie ustawienia wyglądu zapisywane razem z miejscem, żeby wrócić do dokładnie tego samego widoku.
+struct LookSettings: Codable, Equatable {
+    var angle = 0.0
+    var colorMode = 0
+    var density = 1.0
+    var shade = 0.0
+    var glow = 0.0
+    var saturation = 1.0
+    var contrast = 1.0
+    var invert = false
+    var kaleido = 0
+    var interior = false
+    var mode3D = false
+    var pitch = 66.0
+    var height = 0.35
+    var autoRotate = false
+    var rotateSpeed = 8.0
+    var antialias = true
+    var cycleColors = false
+    var cycleSpeed = 0.15
+    var baseIterations = 300.0
+    var phase = 0.0
+    var customColors: [[Float]] = []   // 6 × RGB własnej palety
+}
+
 struct SavedView: Codable, Identifiable, Equatable {
     var id = UUID()
     var name: String
@@ -119,6 +144,7 @@ struct SavedView: Codable, Identifiable, Equatable {
     var juliaRe: Double = -0.8
     var juliaIm: Double = 0.156
     var power: Int = 3
+    var look: LookSettings? = nil   // nil = miejsce bez ustawień wyglądu (np. gotowe miejsca, stare ulubione)
 }
 
 struct Preset: Identifiable {
