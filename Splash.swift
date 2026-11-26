@@ -18,7 +18,7 @@ private struct SplashProgress: View {
             HStack {
                 Text(model.status).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
                 Spacer()
-                Text("v1.2").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                Text("v1.3").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
             }
         }
     }

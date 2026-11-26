@@ -25,7 +25,7 @@ cat > "$APP/Contents/Info.plist" <<'E'
 <key>CFBundleDisplayName</key><string>Fractal Explorer</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>NSHumanReadableCopyright</key><string>Autor: Tomasz Marchewka</string>
-<key>CFBundleShortVersionString</key><string>1.2</string>
+<key>CFBundleShortVersionString</key><string>1.3</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
