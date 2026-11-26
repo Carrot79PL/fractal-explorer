@@ -9,6 +9,7 @@ TMP=$(mktemp -d)
 xcrun -sdk macosx metal -c Shaders.metal -o "$TMP/s.air"
 xcrun -sdk macosx metallib "$TMP/s.air" -o "$APP/Contents/Resources/default.metallib"
 [ -f Assets/splash.jpg ] && cp Assets/splash.jpg "$APP/Contents/Resources/splash.jpg"
+[ -f Assets/podpis_logo.png ] && cp Assets/podpis_logo.png "$APP/Contents/Resources/podpis_logo.png"
 [ -f AppIcon.icns ] && cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 swiftc -O -parse-as-library *.swift -o "$APP/Contents/MacOS/FractalExplorer"
 cat > "$APP/Contents/Info.plist" <<'E'

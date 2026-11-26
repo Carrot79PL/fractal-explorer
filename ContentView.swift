@@ -32,6 +32,7 @@ struct ContentView: View {
                     toolbar(inlinePalettes: true)
                     toolbar(inlinePalettes: false)
                 }
+                .padding(.horizontal, 124)   // miejsce na logo w prawym dolnym rogu (symetrycznie, żeby pasek został na środku)
             }
             .padding(20)
             .opacity(showUI ? 1 : 0)
@@ -53,6 +54,18 @@ struct ContentView: View {
                 .allowsHitTesting(showUI)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+
+            // Logo autora w prawym dolnym rogu (nieinteraktywne).
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    LogoMark().opacity(showUI ? 0.92 : 0.55)
+                }
+            }
+            .padding(.horizontal, 22).padding(.bottom, 27)
+            .allowsHitTesting(false)
+            .animation(.smooth(duration: 0.3), value: showUI)
 
             shortcuts
             cornerButtons
@@ -344,6 +357,21 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+/// Podpis „Tomasz Marchewka STUDIO".
+private struct LogoMark: View {
+    private static let image: NSImage? = Bundle.main.url(forResource: "podpis_logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+
+    var body: some View {
+        if let img = Self.image {
+            Image(nsImage: img)
+                .resizable().scaledToFit()
+                .frame(width: 110)
+                .shadow(color: .black.opacity(0.55), radius: 5, y: 1)
+                .help("Tomasz Marchewka STUDIO")
+        }
     }
 }
 
